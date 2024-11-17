@@ -3,7 +3,7 @@
 此專案使用 Robot Framework 實現 SWAG 平台的自動化測試，包含 Web UI 測試和 API 測試。
 
 作者：Jason Lee\
-聯絡方式：crazy85128x@gmail.com\
+聯絡方式：crazy85128x@gmail.com
 
 ## 目錄
 
