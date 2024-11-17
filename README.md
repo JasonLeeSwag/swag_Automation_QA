@@ -375,8 +375,8 @@ robot -V data.yaml -V country.yaml -V qat_domain.yaml -i video TestCase
 ### 測試自動化最佳實踐
 - [Page Object Pattern](https://martinfowler.com/bliki/PageObject.html)
 - [測試自動化金字塔](https://martinfowler.com/articles/practical-test-pyramid.html)
-- [測試自動化策略](https://www.perfecto.io/blog/test-automation-strategy)
-- [測試自動化框架設計](https://www.browserstack.com/guide/test-automation-frameworks)
+- [測試自動化策略](https://codesensegroup.github.io/code-study/cicd-2.0/chapter10)
+- [測試自動化框架設計](https://www.zentao.net/blog/81542.html)
 
 ### Selenium 相關
 - [Selenium 官方文件](https://www.selenium.dev/documentation/)
@@ -388,16 +388,16 @@ robot -V data.yaml -V country.yaml -V qat_domain.yaml -i video TestCase
 ### API 測試相關
 - [RESTinstance Library](https://github.com/asyrjasalo/RESTinstance)
 - [RequestsLibrary 文件](https://github.com/MarketSquare/robotframework-requests)
-- [API 測試最佳實踐](https://www.soapui.org/learn/api-testing/api-testing-101/)
+- [API 測試最佳實踐](https://ithelp.ithome.com.tw/articles/10362097)
 - [RESTful API 測試策略](https://www.guru99.com/testing-rest-api-manually.html)
 
 ### 效能測試相關
 - [Robot Framework 效能測試](https://github.com/robotframework/robotframework/blob/master/doc/userguide/src/ExtendingRobotFramework/ListenerInterface.rst)
-- [JMeter 與 Robot Framework 整合](https://www.blazemeter.com/blog/robot-framework-jmeter)
+- [JMeter 與 Robot Framework 整合](https://blog.csdn.net/mukeke/article/details/75356316)
 
 ### 持續整合/持續部署 (CI/CD)
 - [Jenkins 與 Robot Framework 整合](https://plugins.jenkins.io/robot/)
-- [GitLab CI 與 Robot Framework](https://docs.gitlab.com/ee/ci/examples/test-ruby-application-with-robot-framework.html)
+- [GitLab CI 與 Robot Framework](https://pradappandiyan.medium.com/running-a-robot-framework-test-on-gitlab-and-deploying-the-report-db2ea18cc082)
 - [Docker 容器化測試環境](https://hub.docker.com/r/ppodgorsek/robot-framework)
 
 ### 報告與日誌分析
