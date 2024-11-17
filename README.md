@@ -88,8 +88,6 @@ bash
 4. 安裝依賴套件
    pip install -r requirements.txt
 
-## 專案結構
-
 swag_Automation_QA/
 ├── TestCase/ # 測試案例
 │ ├── myprofile/ # 個人資料相關測試
@@ -156,10 +154,10 @@ swag_Automation_QA/
 
 bash
 
-執行特定 API 測試標籤的測試
-robot TestCase/login/Login_API.robot
+執行特定 API 測試標籤的測試\
+robot TestCase/login/Login_API.robot\
 
-執行特定測試檔案
+執行特定測試檔案\
 robot -V data.yaml -V country.yaml -V qat_domain.yaml -i login TestCase\
 robot -V data.yaml -V country.yaml -V qat_domain.yaml -i register TestCase\
 robot -V data.yaml -V country.yaml -V qat_domain.yaml -i video TestCase\
