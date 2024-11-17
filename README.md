@@ -88,7 +88,8 @@ bash
 4. 安裝依賴套件
    pip install -r requirements.txt
 
-## 專案結構
+# 專案結構
+```
 swag_Automation_QA/
 ├── TestCase/                          # 測試案例
 │   ├── login/                         # 登入相關測試
@@ -152,6 +153,7 @@ swag_Automation_QA/
 ├── qat_domain.yaml                    # 測試環境配置
 ├── requirements.txt                   # 依賴套件清單
 └── README.md                          # 專案說明文件
+```
 
 ### 目錄說明
 
