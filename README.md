@@ -200,13 +200,19 @@ swag_Automation_QA/
 
 ## 執行測試
 
+### 測試影片Demo
+- [登入-測試影片](https://drive.google.com/file/d/1UJWWOGw0MIaYVYnrk23Huhf0ENFYWoLt/view?usp=drive_link)
+- [註冊-測試影片](https://drive.google.com/file/d/12dQ7HmiLFW_3jb9x1QmaEzOCihKLGyD6/view?usp=drive_link)
+- [解鎖影片(含Bonus)-測試影片](https://drive.google.com/file/d/11Aut5KEqlWZpN5R3ZmYzH9uMdjf0G5GT/view?usp=drive_link)
+
+
 ### 基本執行命令
 ```bash
 # 執行特定 API 測試標籤的測試
 robot TestCase/login/Login_API.robot
 
 # 執行特定測試檔案
-robot -V data.yaml -V country.yaml -V qat_domain.yaml -i login TestCase
+robot -V data.yaml -V country.yaml -V qat_domain.yaml -i login TestCase 
 robot -V data.yaml -V country.yaml -V qat_domain.yaml -i register TestCase
 robot -V data.yaml -V country.yaml -V qat_domain.yaml -i video TestCase
 ```
