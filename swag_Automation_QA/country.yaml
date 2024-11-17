@@ -1,0 +1,9 @@
+# swag_Automation_QA\country.yaml
+#國碼資料
+COUNTRY :
+  HONG KONG:
+    AREA_CODE: "+852"
+  JAPAN:
+    AREA_CODE: "+81"
+  AMERICA:
+    AREA_CODE: "+1"

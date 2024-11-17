@@ -1,0 +1,54 @@
+# swag_Automation_QA\data.yaml
+# 執行環境名稱
+ENV :
+- 'qat'
+- 'uat'
+
+# Stadmin 測試資料
+STADMIN :
+  USERNAME: 'admin'
+  PASSWORD : '123456'
+  #測試文案
+  TEST_TEXT : '自動化測試_測試文案'
+  #內容管理語系
+  LANGUAGE :
+  - 'en_US'
+  - 'zh_CN'
+  - 'zh_HK'
+  - 'ja_JP'
+  - 'ko_KR'
+  - 'es_ES'
+  - 'fr_FR'
+
+# SWAG 測試資料
+SWAG :
+  NEW_USER:
+    MAIL: "new_test@example.com"
+    PASSWORD: "Test123456"
+    USERNAME: "newuser123"
+  VERIFICATION_CODE : '666666'
+  #信箱號
+  MAIL_USER :
+    MAIL : 'autotest@swag.com'
+    PASSWORD : '1qaz2wsx'
+    NEW_PASSWORD : 'Zbinh577'
+  #手機號
+  PHONE_USER :
+    PHONE : '987654321'
+    PASSWORD : '1qaz2wsx'
+    NEW_PASSWORD : 'Zbinh577'
+  #測試帳號
+  MAIL_USER_測試 :
+    MAIL : 'qa_automation_test_1'
+    PASSWORD : 'o88VO1VG8dkIBMQO'
+  #測試號前綴
+  MAIL_USER_前綴 :
+    MAIL : 'autotest@swag.com'
+    PASSWORD : '1qaz2wsx'
+  #錯誤格式
+  WRONG_MAIL_USER :
+    MAIL : '1234567890'
+    PASSWORD : 'xxxxxx'
+    PASSWORD_AGAIN : 'yyyyyy'
+  WRONG_PHONE_USER :
+    PHONE_NUM : '11111'

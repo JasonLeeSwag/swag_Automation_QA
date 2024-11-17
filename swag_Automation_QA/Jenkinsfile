@@ -1,0 +1,309 @@
+pipeline {
+    agent any
+
+    triggers {
+        cron('H/30 * * * *')  // 每半小時執行一次
+    }
+
+    parameters {
+        choice(name: 'Environment', choices: ['qat', 'uat'], description: '请选择环境<3')
+        choice(name: 'Skin', choices: ['', '黑金', '黑綠', '黑紫', '白金'], description: '请选择皮肤<3')
+    }
+
+    environment {
+        // 設定環境變數
+        OPENSSL = '"C:/Program Files/Openssl/OpenSSL-1.1.1h_win32/openssl.exe"'
+        ROBOT = 'C:/Users/Administrator/AppData/Local/Programs/Python/Python312/Scripts/robot.exe'
+        REBOT = 'C:/Users/Administrator/AppData/Local/Programs/Python/Python312/Scripts/rebot.exe'
+        PYTHON = 'C:/Users/Administrator/AppData/Local/Programs/Python/Python312/python.exe'
+    }
+
+    stages {
+        stage('Clean Workspace...') {
+            steps {
+                script {
+                    // 清空工作區
+                    deleteDir()
+                }
+            }
+        }
+
+        stage('Checkout Code...') {
+            steps {
+                checkout scm  // 使用默認的 SCM 設置
+            }
+        }
+
+        stage('Set Environment...') {
+            steps {
+                script {
+                    // 根據觸發原因設置環境變數
+                    if (env.BUILD_USER == 'Timer Trigger') {
+                        env.Environment = 'uat'
+                        env.BUILD_USER = 'Timer'
+                    } else {
+                        env.Environment = params.Environment
+                    }
+                }
+            }
+        }
+
+        stage('Decrypt Files...') {
+            steps {
+                script {
+                    withCredentials([string(credentialsId: 'openssl', variable: 'openssl_pwd')]){
+                        // 解密文件
+                        bat '''
+                            %OPENSSL% enc -d -aes-256-cbc -pbkdf2 -in api.yaml.enc -out api.yaml -k %OPENSSL_PWD%
+                            %OPENSSL% enc -d -aes-256-cbc -pbkdf2 -in country.yaml.enc -out country.yaml -k %OPENSSL_PWD%
+                            %OPENSSL% enc -d -aes-256-cbc -pbkdf2 -in data.yaml.enc -out data.yaml -k %OPENSSL_PWD%
+                            %OPENSSL% enc -d -aes-256-cbc -pbkdf2 -in %Environment%_domain.yaml.enc -out %Environment%_domain.yaml -k %OPENSSL_PWD%
+                        '''
+
+                        bat '''
+                            @echo off
+                            cd "C:/ProgramData/Jenkins/.jenkins/workspace/%JOB_NAME%/robotframework/robot_lib" >nul 2>&1
+                            %OPENSSL% enc -d -aes-256-cbc -pbkdf2 -in dataInfo.py.enc -out dataInfo.py -k %OPENSSL_PWD%
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Set Variables...') {
+            steps {
+                script {
+                    def yamlFilePath = "C:/ProgramData/Jenkins/.jenkins/workspace/${env.JOB_NAME}/${env.Environment}_domain.yaml"
+
+                    // 讀取 YAML 文件內容
+                    def yamlContent = readYaml(file: yamlFilePath)
+
+                    // 賦予選擇的Skin值至yaml SKIN欄位
+                    yamlContent.SKIN = "${params.Skin}"
+
+                    // 將 YAML 內容轉換為字串
+                    def updatedYamlContent = writeYaml(data: yamlContent, returnText: true)
+
+                    // 寫入更新後的 YAML 文件
+                    writeFile(file: yamlFilePath, text: updatedYamlContent)
+                    
+                    def selectSkin = yamlContent.SKIN?.trim() ?: ""
+                    def exchangeBaseUrl
+
+                    if (selectSkin.isEmpty()) {
+                        selectSkin = '黑金'
+                        exchangeBaseUrl = yamlContent.EXCHANGE_BASE_URL
+                    } else {
+                        exchangeBaseUrl = yamlContent."EXCHANGE_${selectSkin}_URL"
+                    }
+
+                // 設定環境變數
+                    env.EXCHANGE_BASE_URL = exchangeBaseUrl
+                    env.SELECT_SKIN = selectSkin
+                }
+            }
+        }
+
+        stage('Global Variable...') {
+            steps {
+                echo "Skin : ${env.SELECT_SKIN}\nEnvironment : ${env.Environment}"
+            }
+        }
+
+        stage('Run Tests...') {
+            steps {
+                script {
+                    echo '============== Robotframework automation testing command line. ==============='
+
+                    echo "${env.ROBOT} -V country.yaml -V api.yaml -V data.yaml -V ${env.Environment}_domain.yaml --variable SKIN:${env.SELECT_SKIN} --variable EXCHANGE_BASE_URL:${env.EXCHANGE_BASE_URL} --variable DEFAULT_CHROME_OPTIONS:--lang=en --disable-gpu --no-sandbox --headless --window-size=1920,1080 -i bvt TestCase"
+
+                    // 執行 Robot Framework 測試命令
+                    def result = bat(script: '''
+                        chcp 65001
+                        %ROBOT% -V country.yaml -V api.yaml -V data.yaml -V %Environment%_domain.yaml --variable SKIN:%SELECT_SKIN% --variable EXCHANGE_BASE_URL:%EXCHANGE_BASE_URL% --variable DEFAULT_CHROME_OPTIONS:"--lang=en --disable-gpu --no-sandbox --headless --window-size=1920,1080" -i bvt TestCase
+                        echo %ERRORLEVEL%
+                    ''', returnStatus: true, returnStdout: true)
+
+                    def ERRORLEVEL = result.toInteger();
+
+                    // 賦予預設值
+                    def ERRORLEVEL_RERUN = -1
+                    def ERRORLEVEL_MERGE = -1
+
+                    // 检查 output.xml 是否存在
+                    if (fileExists('output.xml')) {
+                        if (ERRORLEVEL == 0) {
+                            echo '============== No failures detected, skipping rerunfailed step. =============='
+                        } else {
+                            echo '================ Failures detected, running rerunfailed step. ================'
+
+                            echo "${env.ROBOT} --rerunfailed output.xml -V country.yaml -V api.yaml -V data.yaml -V ${env.Environment}_domain.yaml --variable SKIN:${env.SELECT_SKIN} --variable EXCHANGE_BASE_URL:${env.EXCHANGE_BASE_URL} --variable DEFAULT_CHROME_OPTIONS:--lang=en --disable-gpu --no-sandbox --headless --window-size=1920,1080 --output rerun_output.xml --log rerun_log.html --report rerun_report.html TestCase"
+
+                            def result_rerun = bat(script: '''
+                                chcp 65001
+                                %ROBOT% --rerunfailed output.xml -V country.yaml -V api.yaml -V data.yaml -V %Environment%_domain.yaml --variable SKIN:%SELECT_SKIN% --variable EXCHANGE_BASE_URL:%EXCHANGE_BASE_URL% --variable DEFAULT_CHROME_OPTIONS:"--lang=en --disable-gpu --no-sandbox --headless --window-size=1920,1080" --output rerun_output.xml --log rerun_log.html --report rerun_report.html TestCase
+                                echo %ERRORLEVEL%
+                            ''', returnStatus: true, returnStdout: true)
+
+                            ERRORLEVEL_RERUN = result_rerun.toInteger();
+
+                            if (fileExists('rerun_output.xml')) {
+                                echo '=========== Merge output.xml and rerun_output.xml into output.xml. ==========='
+
+                                echo "${env.REBOT} --output output.xml --log log.html --report report.html --merge output.xml rerun_output.xml"
+
+                                def result_merge = bat(script: '''
+                                    chcp 65001
+                                    %REBOT% --output output.xml --log log.html --report report.html --merge output.xml rerun_output.xml
+                                    echo %ERRORLEVEL%
+                                ''', returnStatus: true, returnStdout: true)
+
+                                ERRORLEVEL_MERGE = result_merge.toInteger();
+
+                                if (ERRORLEVEL_RERUN == 0 && ERRORLEVEL_MERGE == 0) {
+                                    currentBuild.result = 'SUCCESS'
+                                } else {
+                                    currentBuild.result = 'FAILURE'
+                                }
+
+                            } else {
+                                echo '=============== Not found rerun_output.xml, skipping rebot step. ============='
+                                currentBuild.result = 'FAILURE'
+
+                            }
+                        }
+                    } else {
+                        echo '======== Not found output.xml, skipping rerunfailed and rebot steps. ========='
+                        currentBuild.result = 'FAILURE'
+
+                    }
+                    echo "測試結束"
+                }
+            }
+        }
+
+        stage('Copy Files...') {
+            steps {
+                script {
+                    // 封存檔案
+                    bat '''
+                        @echo off
+                        chcp 65001 >nul 2>&1
+                        set SOURCE_DIR=C:/ProgramData/Jenkins/.jenkins/workspace/%JOB_NAME%
+                        set DEST_DIR=C:/ProgramData/Jenkins/.jenkins/jobs/%JOB_NAME%/builds/%BUILD_NUMBER%/robot-plugin
+
+                        mkdir "%DEST_DIR%"
+
+                        copy "%SOURCE_DIR%/log.html" "%DEST_DIR%" >nul 2>&1
+                        copy "%SOURCE_DIR%/report.html" "%DEST_DIR%" >nul 2>&1
+                        copy "%SOURCE_DIR%/output.xml" "%DEST_DIR%" >nul 2>&1
+
+                        xcopy /I /Y "%SOURCE_DIR%\\*.png" "%DEST_DIR%" >nul 2>&1
+                    '''
+                }
+                echo "封存成品"
+            }
+        }
+
+        stage('Publish Results...') {
+            steps {
+                script {
+                    // def report_path = "C:\\ProgramData\\Jenkins\\.jenkins\\jobs\\${env.JOB_NAME}\\builds\\${env.BUILD_NUMBER}\\report"
+                    // echo "${report_path}"
+                    // 使用 Robot Framework 插件來發布測試結果
+                    robot(
+                        outputPath: '.',
+                        logFileName: 'log.html',
+                        outputFileName: 'output.xml',
+                        reportFileName: 'report.html',
+                        passThreshold: 100,
+                        unstableThreshold: 0.0
+                    )
+                }
+                echo "發布報告"
+            }
+        }
+
+        stage('Execute Python Script') {
+            steps {
+                dir("C:/ProgramData/Jenkins/.jenkins/workspace/${env.JOB_NAME}/robotframework/robot_lib") {
+                    script {
+                        def pythonScript = "msgReturn.py"
+                        def reportFilePath = "C:/ProgramData/Jenkins/.jenkins/jobs/${env.JOB_NAME}/builds/${env.BUILD_NUMBER}/robot-plugin/report.html"
+                        def reportData = "reportData.json"
+                        def get_reportData = "${env.PYTHON} ${pythonScript} ${reportFilePath} > ${reportData}"
+
+                        bat(script: """
+                            chcp 65001
+                            ${get_reportData}
+                        """, returnStdout: true).trim()
+
+                        def report_data = readFile(reportData).trim()
+                        def results = readJSON(text: report_data)
+
+                        // env.TEST_SKIN = results.skin.toString()
+                        // env.TEST_TRIGGER = results.trigger.toString()
+                        // env.TEST_ENVIRONMENT = results.environment.toString()
+                        env.TEST_PASSED = results.passed.toString()
+                        env.TEST_FAILED = results.failed.toString()
+                        env.TEST_NUMBER = results.number.toString()
+                        env.TEST_IP = results.ip.toString()
+                        env.TEST_PORT = results.port.toString()
+                        env.TELEGRAM_BOT_TOKEN = results.bot_token.toString()
+                        env.TELEGRAM_CHAT_ID = results.chat_id.toString()
+                    }
+                }
+            }
+        }
+
+        stage('Notify Telegram') {
+            steps {
+                script {
+                    def detailedOutput = false
+
+                    def success_msg = "✅ PASS ✅\n"
+                    def fail_msg = "❌ FAIL ❌\n"
+
+                    def test_msg
+                    if (Integer.parseInt(env.TEST_FAILED) > 0) {
+                        test_msg = fail_msg
+                    } else {
+                        test_msg = success_msg
+                    }
+
+                    def details_msg = "${env.JOB_NAME}\n" +
+                                      "Test Status: \n" +
+                                      " - Skin: ${env.SELECT_SKIN}\n" +
+                                      " - Trigger: ${env.BUILD_USER}\n" +
+                                      " - Environment: ${env.Environment}\n" +
+                                      " - Passed: ${env.TEST_PASSED}, Failed: ${env.TEST_FAILED}\n" +
+                                      " - Log(#${env.BUILD_NUMBER}): http://${env.TEST_IP}:${env.TEST_PORT}/job/${env.JOB_NAME}/${env.BUILD_NUMBER}/robot/report/log.html\n"
+
+                    def final_msg = "${test_msg}${details_msg}"
+
+
+                    def telegramUrl = "https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage"
+
+                    def requestBody = groovy.json.JsonOutput.toJson([
+                        chat_id: env.TELEGRAM_CHAT_ID,
+                        text: final_msg
+                    ])
+
+                    httpRequest acceptType: 'APPLICATION_JSON',
+                                url: telegramUrl,
+                                requestBody: requestBody,
+                                contentType: 'APPLICATION_JSON'
+                }
+                echo "發送通知"
+            }
+        }
+    }
+
+    post {
+        always {
+            script {
+                echo "Build finished with status: ${currentBuild.result}"
+            }
+        }
+    }
+}
