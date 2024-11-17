@@ -88,19 +88,70 @@ bash
 4. 安裝依賴套件
    pip install -r requirements.txt
 
+## 專案結構
 swag_Automation_QA/
-├── TestCase/ # 測試案例
-│ ├── myprofile/ # 個人資料相關測試
-│ ├── video/ # 影片相關測試
-│ └── ...
-├── keyword/ # 關鍵字定義
-│ └── swag/
-│ ├── component/ # 共用元件
-│ ├── page/ # 頁面物件
-│ └── domain/ # 領域服務
-├── data/ # 測試資料
-├── requirements.txt # 依賴套件
-└── README.md # 說明文件
+├── TestCase/                          # 測試案例
+│   ├── login/                         # 登入相關測試
+│   │   ├── Login.robot               # UI 登入測試
+│   │   └── Login_API.robot           # API 登入測試
+│   ├── myprofile/                     # 個人資料相關測試
+│   │   └── Myprofile.robot
+│   ├── register/                      # 註冊相關測試
+│   │   ├── Register.robot            # UI 註冊測試
+│   │   └── Register_API.robot        # API 註冊測試
+│   └── video/                         # 影片相關測試
+│       └── Video.robot
+│
+├── keyword/                           # 關鍵字定義
+│   └── swag/
+│       ├── Swag.sources.robot        # 共用資源定義
+│       ├── component/                # 共用元件
+│       │   └── Swag_Footer.robot
+│       ├── domain/                   # 領域服務
+│       │   └── Swag_LoginService.robot
+│       └── page/                     # 頁面物件
+│           ├── Swag_Home.robot
+│           ├── login/
+│           │   └── Swag_Login.robot
+│           ├── myprofile/
+│           │   └── settings/
+│           │       └── Swag_Settings.robot
+│           ├── register/
+│           │   └── Swag_Register.robot
+│           └── video/
+│               └── Swag_Video.robot
+│
+├── robotframework/                     # 框架核心組件
+│   ├── API/                          # API 測試框架
+│   │   ├── API.robot
+│   │   └── api_sources.robot
+│   ├── browser/                      # 瀏覽器操作相關
+│   │   ├── AlertAction.robot
+│   │   ├── BrowserAction.robot
+│   │   └── ... (其他瀏覽器相關操作)
+│   ├── robot_lib/                    # Python 自定義庫
+│   │   ├── Calculate.py
+│   │   ├── Chrome.py
+│   │   └── ... (其他 Python 模組)
+│   └── utilities/                    # 工具類庫
+│       ├── FileUtils.robot
+│       ├── StringUtils.robot
+│       └── ... (其他工具類)
+│
+├── reports/                           # 測試報告
+│   ├── login_api_report_*.txt
+│   └── register_api_report_*.txt
+│
+├── TestData/                          # 測試資料
+│   ├── test_data01.jpg
+│   └── test_data02.jpg
+│
+├── data/                              # 測試資料目錄
+├── country.yaml                       # 國家設定
+├── data.yaml                          # 基礎測試資料
+├── qat_domain.yaml                    # 測試環境配置
+├── requirements.txt                   # 依賴套件清單
+└── README.md                          # 專案說明文件
 
 ### 目錄說明
 
