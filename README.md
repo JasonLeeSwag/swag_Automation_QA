@@ -205,6 +205,9 @@ swag_Automation_QA/
 - [解鎖影片(含Bonus)-測試影片](https://drive.google.com/file/d/11Aut5KEqlWZpN5R3ZmYzH9uMdjf0G5GT/view?usp=drive_link)
 - [全部測試流程(含Bonus)-測試影片](https://drive.google.com/file/d/1PzmL_lP_5LHWFfmbJbUl6El9-VHZOdMP/view?usp=drive_link)
 
+### 測試報告檔案(UI/API)
+- [詳細測試報告(含Bonus)](https://drive.google.com/drive/folders/1XO6iYtLLHyAO1-pvGGjM7VZFntu2SSPz?usp=sharing)
+
 
 ### 基本執行命令
 ```bash
