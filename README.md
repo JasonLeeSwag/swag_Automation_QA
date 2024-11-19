@@ -210,11 +210,17 @@ swag_Automation_QA/
 ```bash
 # 執行特定 API 測試標籤的測試
 robot TestCase/login/Login_API.robot
+# 執行全部 API 測試標籤的測試
+robot -i api TestCase/
+# or 執行全部檔案名稱內有包含 _API 的測試
+robot TestCase/**/[*_API]*.robot
 
 # 執行特定測試檔案
 robot -V data.yaml -V country.yaml -V qat_domain.yaml -i login TestCase 
 robot -V data.yaml -V country.yaml -V qat_domain.yaml -i register TestCase
 robot -V data.yaml -V country.yaml -V qat_domain.yaml -i video TestCase
+# 執行全部測試檔案
+robot -V data.yaml -V country.yaml -V qat_domain.yaml -i bvt TestCase
 ```
 
 ### 環境變數配置
