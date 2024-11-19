@@ -203,6 +203,7 @@ swag_Automation_QA/
 - [登入-測試影片](https://drive.google.com/file/d/1UJWWOGw0MIaYVYnrk23Huhf0ENFYWoLt/view?usp=drive_link)
 - [註冊-測試影片](https://drive.google.com/file/d/12dQ7HmiLFW_3jb9x1QmaEzOCihKLGyD6/view?usp=drive_link)
 - [解鎖影片(含Bonus)-測試影片](https://drive.google.com/file/d/11Aut5KEqlWZpN5R3ZmYzH9uMdjf0G5GT/view?usp=drive_link)
+- [全部測試流程(含Bonus)-測試影片](https://drive.google.com/file/d/1PzmL_lP_5LHWFfmbJbUl6El9-VHZOdMP/view?usp=drive_link)
 
 
 ### 基本執行命令

@@ -2,7 +2,6 @@
 *.xml
 *.vscode
 *.log
-*.txt
 *.bat
 *.out
 .DS_Store
