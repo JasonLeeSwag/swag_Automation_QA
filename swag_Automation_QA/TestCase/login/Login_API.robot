@@ -7,6 +7,7 @@ Library           OperatingSystem
 Variables         ${EXECDIR}/data.yaml
 Variables         ${EXECDIR}/qat_domain.yaml
 Suite Teardown    生成詳細測試報告    ${SUITE NAME}    # 修改參數
+Force Tags    api
 
 *** Variables ***
 ${API_BASE_URL}         https://swag.live

@@ -8,6 +8,7 @@ Variables         ${EXECDIR}/data.yaml
 Variables         ${EXECDIR}/qat_domain.yaml
 Variables         ${EXECDIR}/country.yaml
 Suite Teardown    生成詳細測試報告    ${SUITE NAME}
+Force Tags    api
 
 *** Variables ***
 ${API_BASE_URL}         https://swag.live
