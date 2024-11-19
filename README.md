@@ -195,7 +195,6 @@ swag_Automation_QA/
 ### 重要檔案說明
 - **requirements.txt**: 列出所有 Python 依賴套件
 - **README.md**: 專案說明文件
-- **LICENSE**: 開源授權聲明
 - **.gitignore**: Git 版本控制忽略規則
 
 ## 執行測試
