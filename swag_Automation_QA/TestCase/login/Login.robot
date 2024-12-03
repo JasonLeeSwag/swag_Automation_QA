@@ -106,11 +106,11 @@ Force Tags      bvt  login
     Swag_Login.點擊手機簡訊登入按鈕
     Swag_Login.確認手機簡訊登入頁面已顯示
 
-# [ST-02-010] Login Check - Sign in with fast
-#     [Tags]  ST-02-010
-#     [Documentation]    使用快速登入功能，但選擇取消生物識別
-#     Swag_Home.點擊免費註冊或登入案紐
-#     Swag_Login.點擊登入按鈕
-#     Swag_Login.檢查當前頁面為會員登入頁
-#     Swag_Login.點擊快速登入按鈕
-#     Swag_Login.處理Windows安全性視窗
+[ST-02-010] Login Check - Sign in with fast
+    [Tags]  ST-02-010
+    [Documentation]    使用快速登入功能，但選擇取消生物識別
+    Swag_Home.點擊免費註冊或登入案紐
+    Swag_Login.點擊登入按鈕
+    Swag_Login.檢查當前頁面為會員登入頁
+    Swag_Login.點擊快速登入按鈕
+    Swag_Login.處理Windows安全性視窗

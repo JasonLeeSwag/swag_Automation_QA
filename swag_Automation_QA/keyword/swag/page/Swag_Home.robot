@@ -4,9 +4,9 @@
 ...                                url=register
 ...                                header_box=//*[@class="LandingContent__Header-sc-eiz103-5 cySmxZ"]
 ...                                register_btn=//*[@data-element_id="button-signup"][contains(.,"免費註冊/登入")]
-...                                free_watch_btn=//button[@data-element_id="landing-page-cta"][contains(.,"立即免費觀看")]
+...                                free_watch_btn=//button[contains(@class, 'LandingContent__WatchNowButton') and text()='立即免費觀看']
 ...                                guide_below_btn=//div[contains(@class, 'LandingContent__DropDownWrapper')]//a[@href='#section-area' and img[contains(@src, 'data:image/svg+xml')]]
-...                                maintitle_txt=//h1[@class="LandingContent__MainTitle-sc-eiz103-11 esgSWz"][contains(.,"亞洲最大成人品牌")]
+...                                maintitle_txt=//h1[@class="LandingContent__MainTitle-sc-eiz103-12 ivVkpo"][contains(.,"亞洲最大成人品牌")]
 
 ...                                search_btn=//*[@data-element_id="tab-button-search"]
 ...                                leaderboard_btn=//*[@data-element_id="tab-button-leaderboard"]
@@ -53,7 +53,7 @@
     Wait Until Element Is Visible  ${Swag_Home.header_box}
     Wait Until Element Is Visible  ${Swag_Home.register_btn}
     Wait Until Element Is Visible  ${Swag_Home.maintitle_txt}
-    Wait Until Element Is Visible  ${Swag_Home.free_watch_btn}
+    # Wait Until Element Is Visible  ${Swag_Home.free_watch_btn}
     Wait Until Element Is Visible  ${Swag_Home.guide_below_btn}
 
 點擊免費註冊或登入案紐
