@@ -18,16 +18,43 @@ jobs:
         with:
           python-version: '3.12'
           check-latest: true
-      
-      # 檢查目錄結構
+
+      # 新增詳細檢查目錄結構
       - name: Check Directory Structure
         run: |
-          echo "Current directory:"
+          echo "顯示當前工作目錄:"
           pwd
-          echo "\nComplete directory structure:"
-          find . -type f
-          echo "\nContents of swag_Automation_QA:"
+          echo "\n顯示 swag_Automation_QA 目錄結構:"
           ls -R swag_Automation_QA/
+          echo "\n尋找所有 .yaml 文件:"
+          find . -name "*.yaml"
+          echo "\n尋找所有 .robot 文件:"
+          find . -name "*.robot"
+          
+      # 新增建立必要目錄
+      - name: Create Required Structure
+        run: |
+          mkdir -p swag_Automation_QA/keyword/swag/
+          
+      # 新增建立基本 Swag.sources.robot 檔案
+      - name: Create Basic Robot Resource File
+        run: |
+          cat << 'EOF' > swag_Automation_QA/keyword/swag/Swag.sources.robot
+          *** Settings ***
+          Library    SeleniumLibrary
+
+          *** Keywords ***
+          開啟Chrome瀏覽器
+              ${chrome_options}=    Evaluate    selenium.webdriver.ChromeOptions()
+              Call Method    ${chrome_options}    add_argument    --start-maximized
+              Call Method    ${chrome_options}    add_argument    --no-sandbox
+              Call Method    ${chrome_options}    add_argument    --disable-dev-shm-usage
+              Create Webdriver    Chrome    chrome_options=${chrome_options}
+              Set Window Size    1920    1080
+
+          關閉所有瀏覽器
+              Close All Browsers
+          EOF
 
       - name: Install Chrome
         run: |
@@ -56,22 +83,18 @@ jobs:
       
       - name: Run Tests
         env:
-          PYTHONPATH: ${GITHUB_WORKSPACE}/swag_Automation_QA/keyword
           DISPLAY: :99
         run: |
           sudo Xvfb :99 -screen 0 1280x1024x24 > /dev/null 2>&1 &
-          
-          # 輸出目前的 PYTHONPATH
-          echo "Current PYTHONPATH: $PYTHONPATH"
+          sleep 2
           
           robot \
             --variable BROWSER:chrome \
             --outputdir results \
-            --pythonpath ${GITHUB_WORKSPACE}/swag_Automation_QA \
-            --pythonpath ${GITHUB_WORKSPACE}/swag_Automation_QA/keyword \
-            -V swag_Automation_QA/data.yaml \
-            -V swag_Automation_QA/qat_domain.yaml \
-            -V swag_Automation_QA/country.yaml \
+            --pythonpath swag_Automation_QA/keyword/swag \
+            --variablefile swag_Automation_QA/data.yaml \
+            --variablefile swag_Automation_QA/qat_domain.yaml \
+            --variablefile swag_Automation_QA/country.yaml \
             -i login swag_Automation_QA/TestCase
       
       - name: Upload Test Results
