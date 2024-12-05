@@ -1,7 +1,7 @@
 # swag_Automation_QA\qat_domain.yaml
 # 執行環境名稱
-# ENV : 'qat'
-ENV: "dev"
+ENV : 'qat'
+# ENV: "dev"
 # Mobile Website
 SWAG_BASE_URL: https://swag.live/?lang=zh-TW
 # Website
