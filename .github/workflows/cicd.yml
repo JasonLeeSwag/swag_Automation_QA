@@ -9,30 +9,30 @@ jobs:
   run_tests:
     runs-on: macos-latest
     steps:
-      # 檢出代碼
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 創建虛擬環境並升級 pip 和 setuptools
+      - name: List Files
+        run: ls -R swag_Automation_QA
+
       - name: Setup Python Virtual Environment
         run: |
           python3 -m venv venv
           source venv/bin/activate
           python3 -m pip install --upgrade pip setuptools
-
-      # 安裝依賴
-      - name: Install Dependencies
-        run: |
-          source venv/bin/activate
           pip install -r swag_Automation_QA/requirements.txt
 
-      # 運行 Robot Framework 測試
+      - name: Install Browser Library
+        run: |
+          source venv/bin/activate
+          pip install robotframework-browser
+          rfbrowser init
+
       - name: Run Tests
         run: |
           source venv/bin/activate
           robot -V swag_Automation_QA/data.yaml -V swag_Automation_QA/country.yaml -V swag_Automation_QA/qat_domain.yaml -i login swag_Automation_QA/TestCase
 
-      # 上傳測試報告到 GitHub Artifact
       - name: Upload Report Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -41,7 +41,6 @@ jobs:
             swag_Automation_QA/report.html
             swag_Automation_QA/reports/
 
-      # 將測試報告推送到 GitHub Repository
       - name: Commit and Push Report
         run: |
           git config user.name "github-actions[bot]"
