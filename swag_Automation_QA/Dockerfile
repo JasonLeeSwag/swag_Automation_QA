@@ -20,11 +20,16 @@ COPY swag_Automation_QA/requirements.txt /app/requirements.txt
 # 創建並啟用虛擬環境，安裝依賴
 RUN python3 -m venv venv && \
     . venv/bin/activate && \
-    pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir \
     robotframework \
     robotframework-seleniumlibrary \
-    selenium
+    selenium \
+    requests \
+    beautifulsoup4 \
+    cryptography \
+    httpx \
+    pillow \
+    psutil
 
 # 創建必要的目錄結構
 RUN mkdir -p /app/swag_Automation_QA/keyword/swag/
@@ -52,4 +57,4 @@ ENV PYTHONPATH=/app/swag_Automation_QA/keyword/swag
 ENV DISPLAY=:99.0
 
 # 設定容器啟動命令
-CMD ["robot", "--version"]
+ENTRYPOINT ["robot"]

@@ -19,19 +19,23 @@ jobs:
       # 建立並運行 Docker 容器
       - name: Build and Run Docker
         run: |
+          # 顯示目錄結構
+          echo "Current directory structure:"
+          ls -R swag_Automation_QA/
+          
+          # 建立並運行容器
           docker build -t swag-test -f swag_Automation_QA/Dockerfile .
-          docker run \
+          docker run --shm-size=2g \
             -v ${PWD}/swag_Automation_QA:/app/swag_Automation_QA \
             -v ${PWD}/results:/app/results \
             swag-test \
-            robot \
-              --variable BROWSER:chrome \
-              --outputdir /app/results \
-              --pythonpath /app/swag_Automation_QA/keyword/swag \
-              --variablefile /app/swag_Automation_QA/data.yaml \
-              --variablefile /app/swag_Automation_QA/qat_domain.yaml \
-              --variablefile /app/swag_Automation_QA/country.yaml \
-              -i login /app/swag_Automation_QA/TestCase
+            --variable BROWSER:chrome \
+            --outputdir /app/results \
+            --pythonpath /app/swag_Automation_QA/keyword/swag \
+            --variablefile /app/swag_Automation_QA/data.yaml \
+            --variablefile /app/swag_Automation_QA/qat_domain.yaml \
+            --variablefile /app/swag_Automation_QA/country.yaml \
+            -i login /app/swag_Automation_QA/TestCase
       
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
