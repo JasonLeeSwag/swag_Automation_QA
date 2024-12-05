@@ -32,11 +32,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y python3-full python3-pip xvfb
-
-      - name: Install Robot Framework
-        run: |
           python3 -m venv venv
           source venv/bin/activate
+          pip install --upgrade pip
           pip install \
             robotframework \
             robotframework-seleniumlibrary \
@@ -45,31 +43,35 @@ jobs:
             selenium \
             requests \
             pyyaml
-      
+
       - name: Setup Chrome and ChromeDriver
         run: |
+          # 安裝最新版 Chrome
+          wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list'
+          sudo apt-get update
           sudo apt-get install -y google-chrome-stable
-          CHROME_VERSION=$(google-chrome --version | cut -d " " -f 3)
-          CHROME_MAJOR_VERSION=$(echo $CHROME_VERSION | cut -d "." -f 1)
           
-          wget -q "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_MAJOR_VERSION}"
-          wget -q "https://chromedriver.storage.googleapis.com/$(cat LATEST_RELEASE_${CHROME_MAJOR_VERSION})/chromedriver_linux64.zip"
+          # 取得 Chrome 版本
+          CHROME_VERSION=$(google-chrome --version | cut -d ' ' -f 3)
+          CHROME_MAJOR_VERSION=$(echo $CHROME_VERSION | cut -d '.' -f 1)
+          
+          # 安裝對應版本的 ChromeDriver
+          CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE")
+          curl -Lo chromedriver_linux64.zip "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
           unzip chromedriver_linux64.zip
           sudo mv chromedriver /usr/local/bin/
           sudo chmod +x /usr/local/bin/chromedriver
           
-          chromedriver --port=4444 &
-          sleep 2
+          # 驗證安裝
+          google-chrome --version
+          chromedriver --version
 
       - name: Start Virtual Display
         run: |
           Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
+          echo "Starting Xvfb..."
           sleep 3
-      
-      - name: Create Required Directories
-        run: |
-          mkdir -p results
-          mkdir -p rerun_results
       
       - name: Run Initial Tests
         id: initial_test
@@ -78,11 +80,14 @@ jobs:
           DISPLAY: :99
         run: |
           source venv/bin/activate
+          mkdir -p results
           robot \
             -V data.yaml \
             -V country.yaml \
             -V ${ENVIRONMENT}_domain.yaml \
-            -i login TestCase
+            -i login \
+            --outputdir results \
+            TestCase
       
       - name: Rerun Failed Tests
         if: steps.initial_test.outcome == 'failure'
@@ -91,15 +96,18 @@ jobs:
           DISPLAY: :99
         run: |
           source venv/bin/activate
+          mkdir -p rerun_results
           robot \
             --rerunfailed results/output.xml \
             -V data.yaml \
             -V country.yaml \
             -V ${ENVIRONMENT}_domain.yaml \
-            -i login TestCase
+            -i login \
+            --outputdir rerun_results \
+            TestCase
 
       - name: Merge Test Results
-        if: steps.initial_test.outcome == 'failure'
+        if: steps.initial_test.outcome == 'failure' && steps.rerun.outcome == 'success'
         env:
           DISPLAY: :99
         run: |
@@ -111,8 +119,8 @@ jobs:
             rerun_results/output.xml
       
       - name: Upload Test Results
-        uses: actions/upload-artifact@v4
         if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: test-results
           path: |
