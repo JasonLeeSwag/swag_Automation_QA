@@ -7,7 +7,7 @@ on:
 
 jobs:
   run_tests:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest  # 改用 Ubuntu 因為它對自動化測試支援較好
     
     steps:
       - name: Checkout Code
@@ -19,61 +19,54 @@ jobs:
           python-version: '3.12'
           check-latest: true
 
-      # 新增詳細檢查目錄結構
-      - name: Check Directory Structure
+      # 安裝虛擬顯示服務和依賴
+      - name: Install Display Service
         run: |
-          echo "顯示當前工作目錄:"
-          pwd
-          echo "\n顯示 swag_Automation_QA 目錄結構:"
-          ls -R swag_Automation_QA/
-          echo "\n尋找所有 .yaml 文件:"
-          find . -name "*.yaml"
-          echo "\n尋找所有 .robot 文件:"
-          find . -name "*.robot"
-          
-      # 新增建立必要目錄
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          sudo apt-get install -y libgconf-2-4 libatk1.0-0 libatk-bridge2.0-0 libgdk-pixbuf2.0-0 libgtk-3-0 libgbm-dev libnss3-dev libxss1
+      
+      # 安裝最新版 Chrome
+      - name: Install Chrome
+        run: |
+          wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+          sudo apt install ./google-chrome-stable_current_amd64.deb
+          google-chrome --version
+      
+      # 安裝 ChromeDriver
+      - name: Install ChromeDriver
+        run: |
+          CHROME_VERSION=$(google-chrome --version | cut -d ' ' -f 3 | cut -d '.' -f 1)
+          wget https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/$CHROME_VERSION.0.6261.94/linux64/chromedriver-linux64.zip
+          unzip chromedriver-linux64.zip
+          sudo mv chromedriver-linux64/chromedriver /usr/local/bin/
+          sudo chmod +x /usr/local/bin/chromedriver
+          chromedriver --version
+
+      # 創建必要目錄結構和檔案
       - name: Create Required Structure
         run: |
           mkdir -p swag_Automation_QA/keyword/swag/
-          
-      # 新增建立基本 Swag.sources.robot 檔案
-      - name: Create Basic Robot Resource File
-        run: |
           cat << 'EOF' > swag_Automation_QA/keyword/swag/Swag.sources.robot
           *** Settings ***
           Library    SeleniumLibrary
-
+          
           *** Keywords ***
           開啟Chrome瀏覽器
               ${chrome_options}=    Evaluate    selenium.webdriver.ChromeOptions()
-              Call Method    ${chrome_options}    add_argument    --start-maximized
+              Call Method    ${chrome_options}    add_argument    --headless
               Call Method    ${chrome_options}    add_argument    --no-sandbox
               Call Method    ${chrome_options}    add_argument    --disable-dev-shm-usage
+              Call Method    ${chrome_options}    add_argument    --disable-gpu
+              Call Method    ${chrome_options}    add_argument    --window-size=1920,1080
               Create Webdriver    Chrome    chrome_options=${chrome_options}
               Set Window Size    1920    1080
-
+          
           關閉所有瀏覽器
               Close All Browsers
           EOF
-
-      - name: Install Chrome
-        run: |
-          brew install --cask google-chrome
-          echo "Chrome version: $(/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version)"
       
-      - name: Install ChromeDriver
-        run: |
-          CHROME_VERSION=$(/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version | cut -d ' ' -f 3 | cut -d '.' -f 1)
-          brew install --cask chromedriver
-          chromedriver --version
-      
-      - name: Setup Chrome
-        run: |
-          sudo chmod -R 755 /opt/homebrew/bin/chromedriver
-          chromedriver --port=4444 &
-          sleep 5
-      
-      - name: Install Dependencies
+      - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
           pip install robotframework
@@ -81,13 +74,18 @@ jobs:
           pip install selenium
           pip install -r swag_Automation_QA/requirements.txt
       
+      # 啟動虛擬顯示服務
+      - name: Start Virtual Display
+        run: |
+          Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
+          echo "Started Xvfb"
+          sleep 3
+      
+      # 運行測試
       - name: Run Tests
         env:
           DISPLAY: :99
         run: |
-          sudo Xvfb :99 -screen 0 1280x1024x24 > /dev/null 2>&1 &
-          sleep 2
-          
           robot \
             --variable BROWSER:chrome \
             --outputdir results \
