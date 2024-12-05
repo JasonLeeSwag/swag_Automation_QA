@@ -2,19 +2,27 @@ name: Weekly Automation Test
 
 on:
   schedule:
-    - cron: "0 10 * * 1"
-  workflow_dispatch:
+    - cron: "0 10 * * 1"  # 每週一上午 10 點觸發
+  workflow_dispatch:       # 手動觸發
 
 jobs:
   run_tests:
-    runs-on: macos-latest
+    runs-on: macos-latest  # 使用 macOS 環境
     steps:
+      # 檢出代碼
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: List Files
-        run: ls -R swag_Automation_QA
+      # 安裝 Chrome 瀏覽器
+      - name: Install Chrome
+        run: |
+          brew install --cask google-chrome
 
+      # 設置 Chrome 瀏覽器路徑
+      - name: Set Chrome Path
+        run: echo "export PATH=\"/Applications/Google Chrome.app/Contents/MacOS:\$PATH\"" >> $GITHUB_ENV
+
+      # 創建虛擬環境並安裝依賴
       - name: Setup Python Virtual Environment
         run: |
           python3 -m venv venv
@@ -22,17 +30,13 @@ jobs:
           python3 -m pip install --upgrade pip setuptools
           pip install -r swag_Automation_QA/requirements.txt
 
-      - name: Install Browser Library
-        run: |
-          source venv/bin/activate
-          pip install robotframework-browser
-          rfbrowser init
-
+      # 運行測試
       - name: Run Tests
         run: |
           source venv/bin/activate
           robot -V swag_Automation_QA/data.yaml -V swag_Automation_QA/country.yaml -V swag_Automation_QA/qat_domain.yaml -i login swag_Automation_QA/TestCase
 
+      # 上傳測試報告到 GitHub Artifact
       - name: Upload Report Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -41,6 +45,7 @@ jobs:
             swag_Automation_QA/report.html
             swag_Automation_QA/reports/
 
+      # 將測試報告推送到 GitHub Repository
       - name: Commit and Push Report
         run: |
           git config user.name "github-actions[bot]"
