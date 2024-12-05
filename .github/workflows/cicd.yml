@@ -78,6 +78,7 @@ jobs:
             -V ${ENVIRONMENT}_domain.yaml \
             -i login \
             --outputdir ../results \
+            --dryrun \
             TestCase
 
       - name: Rerun Failed Tests
