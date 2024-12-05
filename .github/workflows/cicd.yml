@@ -2,32 +2,111 @@ name: Weekly Automation Test
 
 on:
   schedule:
-    - cron: "0 10 * * 1"
-  workflow_dispatch:
+    - cron: "0 10 * * 1"  # 每週一上午 10 點觸發
+  workflow_dispatch:      # 手動觸發
+    inputs:
+      environment:
+        description: '選擇環境'
+        required: true
+        default: 'qat'
+        type: choice
+        options:
+        - qat
+        - uat
 
 jobs:
   run_tests:
     runs-on: ubuntu-latest
     
     steps:
+      - name: Clean Workspace
+        run: |
+          rm -rf *
+      
       - name: Checkout Code
         uses: actions/checkout@v4
       
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      
-      # 建立並運行 Docker 容器
-      - name: Build and Run Docker
+      - name: Setup Python Dependencies
         run: |
-          # 顯示目錄結構
-          echo "Current directory structure:"
-          ls -R swag_Automation_QA/
-          
-          # 建立並運行容器
-          docker build -t swag-test -f swag_Automation_QA/Dockerfile .
-          docker run --shm-size=2g \
-            -v ${PWD}/results:/app/results \
-            swag-test
+          sudo apt-get update
+          sudo apt-get install -y python3-full python3-pip xvfb
+
+      - name: Install Robot Framework
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install \
+            robotframework \
+            robotframework-seleniumlibrary \
+            selenium \
+            requests \
+            beautifulsoup4 \
+            cryptography \
+            httpx \
+            pillow \
+            psutil
+      
+      - name: Setup Chrome and ChromeDriver
+        run: |
+          sudo apt-get install -y google-chrome-stable
+          CHROME_VERSION=$(google-chrome --version | cut -d ' ' -f 3 | cut -d '.' -f 1)
+          wget https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/$CHROME_VERSION.0.6261.94/linux64/chromedriver-linux64.zip
+          unzip chromedriver-linux64.zip
+          sudo mv chromedriver-linux64/chromedriver /usr/local/bin/
+          sudo chmod +x /usr/local/bin/chromedriver
+
+      - name: Start Virtual Display
+        run: |
+          Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
+          echo "Started Xvfb"
+          sleep 3
+      
+      - name: Run Initial Tests
+        id: initial_test
+        continue-on-error: true
+        env:
+          DISPLAY: :99
+        run: |
+          source venv/bin/activate
+          robot \
+            --variable BROWSER:chrome \
+            --variable DEFAULT_CHROME_OPTIONS:"--headless --disable-gpu --no-sandbox --window-size=1920,1080" \
+            --outputdir results \
+            --pythonpath swag_Automation_QA/keyword/swag \
+            --variablefile swag_Automation_QA/data.yaml \
+            --variablefile swag_Automation_QA/qat_domain.yaml \
+            --variablefile swag_Automation_QA/country.yaml \
+            -i login swag_Automation_QA/TestCase
+
+      - name: Rerun Failed Tests
+        if: steps.initial_test.outcome == 'failure'
+        continue-on-error: true
+        env:
+          DISPLAY: :99
+        run: |
+          source venv/bin/activate
+          robot \
+            --rerunfailed results/output.xml \
+            --variable BROWSER:chrome \
+            --variable DEFAULT_CHROME_OPTIONS:"--headless --disable-gpu --no-sandbox --window-size=1920,1080" \
+            --outputdir rerun_results \
+            --pythonpath swag_Automation_QA/keyword/swag \
+            --variablefile swag_Automation_QA/data.yaml \
+            --variablefile swag_Automation_QA/qat_domain.yaml \
+            --variablefile swag_Automation_QA/country.yaml \
+            -i login swag_Automation_QA/TestCase
+
+      - name: Merge Test Results
+        if: steps.initial_test.outcome == 'failure'
+        env:
+          DISPLAY: :99
+        run: |
+          source venv/bin/activate
+          rebot \
+            --output results/output.xml \
+            --merge \
+            results/output.xml \
+            rerun_results/output.xml
       
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
@@ -36,4 +115,4 @@ jobs:
           name: test-results
           path: |
             results/
-            swag_Automation_QA/reports/
+            rerun_results/
