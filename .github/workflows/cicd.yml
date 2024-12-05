@@ -71,7 +71,7 @@ jobs:
         run: |
           source venv/bin/activate
           mkdir -p results
-          
+          cd swag_Automation_QA
           robot \
             -V data.yaml \
             -V country.yaml \
