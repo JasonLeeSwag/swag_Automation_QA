@@ -9,20 +9,13 @@ jobs:
   run_tests:
     runs-on: macos-latest  # 使用 macOS 環境
     steps:
-      # 檢出代碼
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 安裝 Chrome 瀏覽器
       - name: Install Chrome
         run: |
           brew install --cask google-chrome
 
-      # 設置 Chrome 瀏覽器路徑
-      - name: Set Chrome Path
-        run: echo "export PATH=\"/Applications/Google Chrome.app/Contents/MacOS:\$PATH\"" >> $GITHUB_ENV
-
-      # 創建虛擬環境並安裝依賴
       - name: Setup Python Virtual Environment
         run: |
           python3 -m venv venv
@@ -30,13 +23,16 @@ jobs:
           python3 -m pip install --upgrade pip setuptools
           pip install -r swag_Automation_QA/requirements.txt
 
-      # 運行測試
+      - name: Copy Required Files
+        run: |
+          cp swag_Automation_QA/data.yaml /app/data.yaml
+          cp swag_Automation_QA/qat_domain.yaml /app/qat_domain.yaml
+
       - name: Run Tests
         run: |
           source venv/bin/activate
-          robot -V swag_Automation_QA/data.yaml -V swag_Automation_QA/country.yaml -V swag_Automation_QA/qat_domain.yaml -i login swag_Automation_QA/TestCase
+          robot -V /app/data.yaml -V /app/qat_domain.yaml -i login swag_Automation_QA/TestCase
 
-      # 上傳測試報告到 GitHub Artifact
       - name: Upload Report Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -44,14 +40,3 @@ jobs:
           path: |
             swag_Automation_QA/report.html
             swag_Automation_QA/reports/
-
-      # 將測試報告推送到 GitHub Repository
-      - name: Commit and Push Report
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add swag_Automation_QA/report.html swag_Automation_QA/reports/
-          git commit -m "Update test report [skip ci]"
-          git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
