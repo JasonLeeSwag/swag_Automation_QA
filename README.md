@@ -59,7 +59,7 @@
 # 從 https://www.python.org/downloads/ 下載並安裝
 
 # 2. 克隆專案
-git clone https://github.com/crazy85128x/SWAG-Automation-QA
+git https://github.com/JasonLeeSwag/swag_Automation_QA
 cd swag_Automation_QA
 
 # 3. 建立虛擬環境
