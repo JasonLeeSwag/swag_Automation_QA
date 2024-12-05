@@ -2,54 +2,72 @@ name: Weekly Automation Test
 
 on:
   schedule:
-    - cron: "0 10 * * 1"  # 每週一上午 10 點觸發
-  workflow_dispatch:      # 手動觸發
+    - cron: "0 10 * * 1"
+  workflow_dispatch:
 
 jobs:
   run_tests:
-    runs-on: macos-latest  # 使用 macOS 環境
+    runs-on: macos-latest
     
     steps:
-      # 檢出代碼
       - name: Checkout Code
         uses: actions/checkout@v4
       
-      # 安裝 Chrome 瀏覽器
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+      
       - name: Install Chrome
         run: |
           brew install --cask google-chrome
-      
-      # 創建虛擬環境並安裝依賴
-      - name: Setup Python Virtual Environment
+          
+      - name: Install Chrome WebDriver
         run: |
-          python3 -m venv venv
-          source venv/bin/activate
-          python3 -m pip install --upgrade pip setuptools
-          pip install robotframework-seleniumlibrary
-          pip install -r swag_Automation_QA/requirements.txt
-      
-      # 驗證目錄結構
+          brew install chromedriver
+          
       - name: Verify Directory Structure
         run: |
+          pwd
+          ls -la
           ls -R swag_Automation_QA/
       
-      # 運行測試
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install robotframework
+          pip install robotframework-seleniumlibrary
+          pip install -r swag_Automation_QA/requirements.txt
+          
+      - name: Check YAML Files
+        run: |
+          if [ -f "swag_Automation_QA/data.yaml" ]; then
+            echo "data.yaml exists"
+          else
+            echo "data.yaml not found"
+          fi
+          if [ -f "swag_Automation_QA/qat_domain.yaml" ]; then
+            echo "qat_domain.yaml exists"
+          else
+            echo "qat_domain.yaml not found"
+          fi
+      
       - name: Run Tests
         run: |
-          source venv/bin/activate
-          robot -V swag_Automation_QA/data.yaml \
-                -V swag_Automation_QA/qat_domain.yaml \
-                -V swag_Automation_QA/country.yaml \
-                --pythonpath swag_Automation_QA/keyword \
-                -i login swag_Automation_QA/TestCase
+          export PYTHONPATH=$PYTHONPATH:${GITHUB_WORKSPACE}/swag_Automation_QA/keyword
+          robot \
+            --variable BROWSER:headlesschrome \
+            --outputdir results \
+            -V swag_Automation_QA/data.yaml \
+            -V swag_Automation_QA/qat_domain.yaml \
+            -V swag_Automation_QA/country.yaml \
+            -i login swag_Automation_QA/TestCase
       
-      # 上傳測試報告到 GitHub Artifact
-      - name: Upload Report Artifact
+      - name: Upload Test Results
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: test-reports
+          name: test-results
           path: |
-            swag_Automation_QA/report.html
+            results/
             swag_Automation_QA/reports/
-            swag_Automation_QA/log.html
-            swag_Automation_QA/output.xml
