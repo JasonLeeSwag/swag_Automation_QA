@@ -14,55 +14,69 @@ jobs:
         uses: actions/checkout@v4
       
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.12'  # 使用 Python 3.12.x
+          check-latest: true      # 確保使用最新的修訂版本
       
+      # 確認 Python 版本
+      - name: Check Python Version
+        run: |
+          python --version
+          pip --version
+      
+      # 安裝最新版 Chrome
       - name: Install Chrome
         run: |
           brew install --cask google-chrome
           
-      - name: Install Chrome WebDriver
+      # 安裝對應版本的 ChromeDriver
+      - name: Install ChromeDriver
         run: |
-          brew install chromedriver
+          CHROME_VERSION=$(google-chrome --version | cut -d ' ' -f 3 | cut -d '.' -f 1)
+          brew install --cask chromedriver
+          chromedriver --version
           
-      - name: Verify Directory Structure
+      # 設置 Chrome 和 ChromeDriver
+      - name: Setup Chrome
         run: |
-          pwd
-          ls -la
-          ls -R swag_Automation_QA/
+          sudo chmod -R 755 /usr/local/bin/chromedriver
+          chromedriver --port=4444 &
+          sleep 5
       
+      # 安裝所需的 Python 套件
       - name: Install Dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
           pip install robotframework
           pip install robotframework-seleniumlibrary
+          pip install webdrivermanager
           pip install -r swag_Automation_QA/requirements.txt
           
-      - name: Check YAML Files
+      # 驗證環境設置
+      - name: Verify Setup
         run: |
-          if [ -f "swag_Automation_QA/data.yaml" ]; then
-            echo "data.yaml exists"
-          else
-            echo "data.yaml not found"
-          fi
-          if [ -f "swag_Automation_QA/qat_domain.yaml" ]; then
-            echo "qat_domain.yaml exists"
-          else
-            echo "qat_domain.yaml not found"
-          fi
+          google-chrome --version
+          chromedriver --version
+          python -c "import selenium; print('Selenium version:', selenium.__version__)"
       
+      # 運行測試
       - name: Run Tests
+        env:
+          PYTHONPATH: ${GITHUB_WORKSPACE}/swag_Automation_QA/keyword
+          DISPLAY: :99
         run: |
-          export PYTHONPATH=$PYTHONPATH:${GITHUB_WORKSPACE}/swag_Automation_QA/keyword
+          sudo Xvfb :99 -screen 0 1280x1024x24 > /dev/null 2>&1 &
+          
           robot \
-            --variable BROWSER:headlesschrome \
+            --variable BROWSER:chrome \
             --outputdir results \
             -V swag_Automation_QA/data.yaml \
             -V swag_Automation_QA/qat_domain.yaml \
             -V swag_Automation_QA/country.yaml \
             -i login swag_Automation_QA/TestCase
       
+      # 上傳測試結果
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
         if: always()
