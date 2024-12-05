@@ -2,26 +2,27 @@ name: Weekly Automation Test
 
 on:
   schedule:
-    - cron: "0 10 * * 1"  # 每週一上午 10 點觸發
-  workflow_dispatch:       # 手動觸發
+    - cron: "0 10 * * 1"
+  workflow_dispatch:
 
 jobs:
   run_tests:
-    runs-on: macos-latest  # 使用 macOS 環境
+    runs-on: macos-latest
     steps:
       # 檢出代碼
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 升級 pip 和 setuptools，避免依賴問題
-      - name: Upgrade pip and setuptools
+      # 創建虛擬環境並升級 pip 和 setuptools
+      - name: Setup Python Virtual Environment
         run: |
+          python3 -m venv venv
+          source venv/bin/activate
           python3 -m pip install --upgrade pip setuptools
 
       # 安裝依賴
       - name: Install Dependencies
         run: |
-          python3 -m venv venv
           source venv/bin/activate
           pip install -r swag_Automation_QA/requirements.txt
 
