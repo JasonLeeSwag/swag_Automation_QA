@@ -1,78 +1,55 @@
-name: Run Robot Framework Tests
+name: Weekly Automation Test
 
+# 設定觸發條件：每週一上午 10 點
 on:
   schedule:
-    # 每週一早上10點運行
-    - cron: '0 10 * * 1'
+    - cron: "0 10 * * 1"
 
 jobs:
-  run-tests:
-    runs-on: ubuntu-latest
+  run_tests:
+    runs-on: ubuntu-latest  # 或 'macos-latest'
     steps:
       # 檢出代碼
       - name: Checkout Code
         uses: actions/checkout@v4
 
       # 設置 Python 環境
-      - name: Set up Python 3.12
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: 3.12
 
-      # 安裝 Docker
-      - name: Set up Docker
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y docker.io
-          sudo systemctl start docker
-          sudo systemctl enable docker
-
-      # 構建並運行 Docker 容器
-      - name: Build and Run Docker Container
-        run: |
-          docker build -t swag-automation .
-          docker run --name swag-test-runner swag-automation
-
-      # 安裝依賴套件
+      # 安裝依賴
       - name: Install Dependencies
         run: |
-          python -m venv venv
+          python3 -m venv venv
           source venv/bin/activate
           pip install -r requirements.txt
 
-      # 執行測試
+      # 運行 Robot Framework 測試
       - name: Run Tests
         run: |
           source venv/bin/activate
           robot -V data.yaml -V country.yaml -V qat_domain.yaml -i login TestCase
+        env:
+          ROBOT_ENV: "test"
 
-      # 確認生成報告
-      - name: Verify Report
-        run: |
-          if [ ! -f report.html ]; then
-            echo "Report not found!"
-            exit 1
-          fi
-
-      # 上傳 `report.html`
-      - name: Upload Report
+      # 上傳測試報告到 GitHub Artifact
+      - name: Upload Report Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: report.html
-          path: report.html
+          name: test-reports
+          path: |
+            report.html
+            reports/
 
-      # 上傳 `reports` 資料夾
-      - name: Upload Reports Folder
-        uses: actions/upload-artifact@v4
-        with:
-          name: reports
-          path: reports/
-
-      # 提交更新到 GitHub
-      - name: Commit and Push Updates
+      # 將測試報告覆蓋到 GitHub Repository
+      - name: Commit and Push Report
         run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          git add reports/
-          git commit -m "Update reports [skip ci]"
-          git push origin main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add report.html reports/
+          git commit -m "Update test report [skip ci]"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
