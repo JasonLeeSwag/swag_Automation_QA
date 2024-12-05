@@ -19,6 +19,16 @@ jobs:
           python-version: '3.12'
           check-latest: true
       
+      # 檢查目錄結構
+      - name: Check Directory Structure
+        run: |
+          echo "Current directory:"
+          pwd
+          echo "\nComplete directory structure:"
+          find . -type f
+          echo "\nContents of swag_Automation_QA:"
+          ls -R swag_Automation_QA/
+
       - name: Install Chrome
         run: |
           brew install --cask google-chrome
@@ -44,30 +54,6 @@ jobs:
           pip install selenium
           pip install -r swag_Automation_QA/requirements.txt
       
-      # 新增：檢查目錄結構和檔案
-      - name: Check Directory Structure
-        run: |
-          echo "Current directory:"
-          pwd
-          echo "\nDirectory contents:"
-          ls -R
-          
-          echo "\nVerifying YAML files:"
-          ls -l swag_Automation_QA/*.yaml
-          
-          echo "\nVerifying Robot Resource files:"
-          ls -l swag_Automation_QA/keyword/swag/
-
-      # 新增：創建必要的目錄結構
-      - name: Create Required Directories
-        run: |
-          mkdir -p swag_Automation_QA/keyword/swag/
-          
-      # 新增：複製關鍵字文件
-      - name: Copy Robot Resource Files
-        run: |
-          cp swag_Automation_QA/keyword/Swag.sources.robot swag_Automation_QA/keyword/swag/
-      
       - name: Run Tests
         env:
           PYTHONPATH: ${GITHUB_WORKSPACE}/swag_Automation_QA/keyword
@@ -75,11 +61,14 @@ jobs:
         run: |
           sudo Xvfb :99 -screen 0 1280x1024x24 > /dev/null 2>&1 &
           
+          # 輸出目前的 PYTHONPATH
+          echo "Current PYTHONPATH: $PYTHONPATH"
+          
           robot \
             --variable BROWSER:chrome \
             --outputdir results \
-            --pythonpath swag_Automation_QA/keyword \
-            --pythonpath swag_Automation_QA/keyword/swag \
+            --pythonpath ${GITHUB_WORKSPACE}/swag_Automation_QA \
+            --pythonpath ${GITHUB_WORKSPACE}/swag_Automation_QA/keyword \
             -V swag_Automation_QA/data.yaml \
             -V swag_Automation_QA/qat_domain.yaml \
             -V swag_Automation_QA/country.yaml \
