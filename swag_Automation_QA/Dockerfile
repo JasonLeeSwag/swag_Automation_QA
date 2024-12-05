@@ -17,10 +17,8 @@ WORKDIR /app
 # 複製需要的檔案
 COPY swag_Automation_QA/requirements.txt /app/requirements.txt
 
-# 創建並啟用虛擬環境，安裝依賴
-RUN python3 -m venv venv && \
-    . venv/bin/activate && \
-    pip install --no-cache-dir \
+# 安裝依賴
+RUN python3 -m pip install --no-cache-dir \
     robotframework \
     robotframework-seleniumlibrary \
     selenium \
@@ -31,30 +29,23 @@ RUN python3 -m venv venv && \
     pillow \
     psutil
 
-# 創建必要的目錄結構
-RUN mkdir -p /app/swag_Automation_QA/keyword/swag/
+# 複製整個專案
+COPY swag_Automation_QA /app/swag_Automation_QA
 
-# 建立 Swag.sources.robot 文件
-RUN echo '*** Settings ***\n\
-Library    SeleniumLibrary\n\
-\n\
-*** Keywords ***\n\
-開啟Chrome瀏覽器\n\
-    ${chrome_options}=    Evaluate    selenium.webdriver.ChromeOptions()\n\
-    Call Method    ${chrome_options}    add_argument    --no-sandbox\n\
-    Call Method    ${chrome_options}    add_argument    --disable-dev-shm-usage\n\
-    Create Webdriver    Chrome    chrome_options=${chrome_options}\n\
-    Set Window Size    1920    1080\n\
-\n\
-關閉所有瀏覽器\n\
-    Close All Browsers' > /app/swag_Automation_QA/keyword/swag/Swag.sources.robot
+# 設定環境變數
+ENV PATH="/usr/local/bin:${PATH}"
+ENV PYTHONPATH=/app/swag_Automation_QA/keyword/swag
+ENV DISPLAY=:99.0
 
 # 切換回 seluser 用戶
 USER seluser
 
-# 設定環境變數
-ENV PYTHONPATH=/app/swag_Automation_QA/keyword/swag
-ENV DISPLAY=:99.0
-
-# 設定容器啟動命令
-ENTRYPOINT ["robot"]
+# 設定啟動命令
+CMD ["/usr/local/bin/python3", "-m", "robot", \
+     "--variable", "BROWSER:chrome", \
+     "--outputdir", "/app/results", \
+     "--pythonpath", "/app/swag_Automation_QA/keyword/swag", \
+     "--variablefile", "/app/swag_Automation_QA/data.yaml", \
+     "--variablefile", "/app/swag_Automation_QA/qat_domain.yaml", \
+     "--variablefile", "/app/swag_Automation_QA/country.yaml", \
+     "-i", "login", "/app/swag_Automation_QA/TestCase"]

@@ -1,9 +1,0 @@
-﻿{
-  "agentId": 2,
-  "agentName": "AdmindeMacBook-Pro-10",
-  "poolId": 1,
-  "poolName": "Default",
-  "serverUrl": "https://pipelinesghubeus5.actions.githubusercontent.com/7wnYp55oZVvqf9e8C80u84pIexdhJaRkgNiL5i2xopAhTuM1eX/",
-  "gitHubUrl": "https://github.com/JasonLeeSwag/swag_Automation_QA",
-  "workFolder": "_work"
-}
