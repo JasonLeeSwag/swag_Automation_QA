@@ -14,8 +14,15 @@ COPY . /app
 
 # 安裝 Python 依賴
 RUN python3 -m venv venv && \
-    source venv/bin/activate && \
+    . venv/bin/activate && \
+    pip install robotframework-seleniumlibrary && \
     pip install -r swag_Automation_QA/requirements.txt
 
 # 預設執行測試命令
-CMD ["robot", "-V", "swag_Automation_QA/data.yaml", "-V", "swag_Automation_QA/qat_domain.yaml", "-i", "login", "swag_Automation_QA/TestCase"]
+CMD ["robot", \
+     "-V", "swag_Automation_QA/data.yaml", \
+     "-V", "swag_Automation_QA/qat_domain.yaml", \
+     "-V", "swag_Automation_QA/country.yaml", \
+     "--pythonpath", "swag_Automation_QA/keyword", \
+     "-i", "login", \
+     "swag_Automation_QA/TestCase"]
