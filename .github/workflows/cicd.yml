@@ -1,8 +1,7 @@
 name: Weekly Automation Test
 
 # 設定觸發條件：每週一上午 10 點
-on:
-  schedule:workflow_dispatch
+on: workflow_dispatch
     # - cron: "0 10 * * 1"
 
 jobs:
