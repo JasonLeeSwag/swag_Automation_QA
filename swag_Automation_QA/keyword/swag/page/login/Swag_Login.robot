@@ -32,18 +32,18 @@
 
 
 #「Sign in with Google」
-...                                sign_in_with_google_btn=//div[contains(@class, 'WHUyzc') and text()='Sign in with Google']
-...                                sign_in_title=//h1[@id='headingText']//span[text()='Sign in']
-...                                email_or_phone_input=//input[@type='email' and @name='identifier' and @aria-label='Email or phone']
-...                                forgot_email_btn=//button[text()='Forgot email?']
-...                                create_account_btn=//button[.//span[text()='Create account']]
-...                                next_btn=//button[.//span[text()='Next']]
+...                                sign_in_title=//h1[@id='headingText']
+...                                email_or_phone_input=//input[@id='identifierId' and @type='email' and @name='identifier']
+...                                forgot_email_btn=//button[@jsname='Cuz2Ue' and @type='button']
+...                                create_account_btn=//button[@jsname='LgbsSe' and @type='button' and .//span[text()='建立帳戶']]
+...                                next_btn=//button[@jsname='LgbsSe' and @type='button' and ancestor::div[@id='identifierNext']]
 
 #「Sign in with Apple」
 ...                                apple_account_title=//div[@class='ac-localnav-title']
 ...                                apple_account_signin_text=//h1[contains(@class, 'si-container-title')]
-...                                email_or_phone_input_label=//span[@id='apple_id_field_label' and text()='Email or Phone Number']
-...                                continue_btn=//button[@id='sign-in' and contains(@class, 'si-button') and @aria-label='Continue']
+...                                email_or_phone_input_label=//input[@type='text' and @can-field='accountName' and @aria-labelledby='apple_id_field_label']
+...                                continue_btn=//button[@id='sign-in']
+...                                apple_forgot_btn=//a[contains(@href, 'iforgot.apple.com')]
 
 #「Sign in with Mail」
 ...                                email_login_btn=//*[@data-element_id="button-email-enter"][contains(., "登入")]
@@ -144,7 +144,6 @@
     Wait And Click Element         ${Swag_Login.google_login_btn}
 
 確認Google登入頁面已顯示
-    Wait Until Element Is Visible        ${Swag_Login.sign_in_with_google_btn}
     Wait Until Element Is Visible        ${Swag_Login.sign_in_title}
     Wait Until Element Is Visible        ${Swag_Login.email_or_phone_input}
     Wait Until Element Is Visible        ${Swag_Login.forgot_email_btn}
@@ -159,6 +158,7 @@
     Wait Until Element Is Visible        ${Swag_Login.apple_account_signin_text}
     Wait Until Element Is Visible        ${Swag_Login.email_or_phone_input_label}
     Wait Until Element Is Visible        ${Swag_Login.continue_btn}
+    Wait Until Element Is Visible        ${Swag_Login.apple_forgot_btn}
 
 點擊電子郵件登入按鈕
     Wait And Click Element         ${Swag_Login.mail_login_btn}
