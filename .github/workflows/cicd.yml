@@ -2,8 +2,8 @@ name: Weekly Automation Test
 
 on:
   schedule:
-    - cron: "0 10 * * 1"  # 每週一上午 10 點觸發
-  workflow_dispatch:      # 手動觸發
+    - cron: "*/30 * * * *"  # 每半小時執行一次
+  workflow_dispatch:
     inputs:
       environment:
         description: '選擇環境'
@@ -18,10 +18,12 @@ jobs:
   run_tests:
     runs-on: ubuntu-latest
     
+    env:
+      ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
+      
     steps:
       - name: Clean Workspace
-        run: |
-          rm -rf *
+        run: rm -rf *
       
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -38,41 +40,30 @@ jobs:
           pip install \
             robotframework \
             robotframework-seleniumlibrary \
+            robotframework-requests \
+            robotframework-jsonlibrary \
             selenium \
             requests \
-            beautifulsoup4 \
-            cryptography \
-            httpx \
-            pillow \
-            psutil
+            pyyaml
       
       - name: Setup Chrome and ChromeDriver
         run: |
-          # Install Chrome
           sudo apt-get install -y google-chrome-stable
-          
-          # Get Chrome version
           CHROME_VERSION=$(google-chrome --version | cut -d " " -f 3)
           CHROME_MAJOR_VERSION=$(echo $CHROME_VERSION | cut -d "." -f 1)
           
-          # Install ChromeDriver
-          wget -q https://storage.googleapis.com/chrome-for-testing-public/$CHROME_VERSION/linux64/chromedriver-linux64.zip
-          unzip chromedriver-linux64.zip
-          sudo mv chromedriver-linux64/chromedriver /usr/local/bin/
+          wget -q "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_MAJOR_VERSION}"
+          wget -q "https://chromedriver.storage.googleapis.com/$(cat LATEST_RELEASE_${CHROME_MAJOR_VERSION})/chromedriver_linux64.zip"
+          unzip chromedriver_linux64.zip
+          sudo mv chromedriver /usr/local/bin/
           sudo chmod +x /usr/local/bin/chromedriver
           
-          # Verify installations
-          echo "Chrome version: $(google-chrome --version)"
-          echo "ChromeDriver version: $(chromedriver --version)"
-          
-          # Start ChromeDriver
           chromedriver --port=4444 &
           sleep 2
 
       - name: Start Virtual Display
         run: |
           Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
-          echo "Started Xvfb"
           sleep 3
       
       - name: Create Required Directories
@@ -88,15 +79,11 @@ jobs:
         run: |
           source venv/bin/activate
           robot \
-            --variable BROWSER:chrome \
-            --variable DEFAULT_CHROME_OPTIONS:"--headless --disable-gpu --no-sandbox --window-size=1920,1080" \
-            --outputdir results \
-            --pythonpath swag_Automation_QA/keyword/swag \
-            --variablefile swag_Automation_QA/data.yaml \
-            --variablefile swag_Automation_QA/qat_domain.yaml \
-            --variablefile swag_Automation_QA/country.yaml \
-            -i login swag_Automation_QA/TestCase
-
+            -V data.yaml \
+            -V country.yaml \
+            -V ${ENVIRONMENT}_domain.yaml \
+            -i login TestCase
+      
       - name: Rerun Failed Tests
         if: steps.initial_test.outcome == 'failure'
         continue-on-error: true
@@ -106,14 +93,10 @@ jobs:
           source venv/bin/activate
           robot \
             --rerunfailed results/output.xml \
-            --variable BROWSER:chrome \
-            --variable DEFAULT_CHROME_OPTIONS:"--headless --disable-gpu --no-sandbox --window-size=1920,1080" \
-            --outputdir rerun_results \
-            --pythonpath swag_Automation_QA/keyword/swag \
-            --variablefile swag_Automation_QA/data.yaml \
-            --variablefile swag_Automation_QA/qat_domain.yaml \
-            --variablefile swag_Automation_QA/country.yaml \
-            -i login swag_Automation_QA/TestCase
+            -V data.yaml \
+            -V country.yaml \
+            -V ${ENVIRONMENT}_domain.yaml \
+            -i login TestCase
 
       - name: Merge Test Results
         if: steps.initial_test.outcome == 'failure'
