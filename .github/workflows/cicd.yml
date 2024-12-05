@@ -11,27 +11,30 @@ on:
         default: 'qat'
         type: choice
         options:
-        - qat
-        - uat
+          - qat
+          - uat
 
 jobs:
   run_tests:
     runs-on: ubuntu-latest
     
     env:
-      ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
+      ENVIRONMENT: ${{ github.event.inputs.environment || 'uat' }}
       
     steps:
+      # 清理工作空間
       - name: Clean Workspace
         run: rm -rf *
       
+      # 檢出代碼
       - name: Checkout Code
         uses: actions/checkout@v4
       
+      # 安裝 Python 和依賴
       - name: Setup Python Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-full python3-pip xvfb
+          sudo apt-get install -y python3-full python3-pip xvfb unzip
           python3 -m venv venv
           source venv/bin/activate
           pip install --upgrade pip
@@ -40,10 +43,15 @@ jobs:
             robotframework-seleniumlibrary \
             robotframework-requests \
             robotframework-jsonlibrary \
+            robotframework-debuglibrary \
+            pyotp \
             selenium \
+            webdriver_manager \
             requests \
-            pyyaml
+            pyyaml \
+            JsonValidator
 
+      # 安裝 Chrome 和 ChromeDriver
       - name: Setup Chrome and ChromeDriver
         run: |
           sudo apt-get install -y google-chrome-stable
@@ -57,12 +65,14 @@ jobs:
           google-chrome --version
           chromedriver --version
 
+      # 啟動虛擬顯示器
       - name: Start Virtual Display
         run: |
           Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
           echo "Starting Xvfb..."
           sleep 3
       
+      # 運行測試
       - name: Run Initial Tests
         id: initial_test
         continue-on-error: true
@@ -80,6 +90,7 @@ jobs:
             --outputdir ../results \
             TestCase
 
+      # 重新運行失敗的測試
       - name: Rerun Failed Tests
         if: steps.initial_test.outcome == 'failure'
         continue-on-error: true
@@ -98,6 +109,7 @@ jobs:
             --outputdir ../rerun_results \
             TestCase
 
+      # 合併測試結果
       - name: Merge Test Results
         if: steps.initial_test.outcome == 'failure' && steps.rerun.outcome == 'success'
         env:
@@ -110,6 +122,7 @@ jobs:
             results/output.xml \
             rerun_results/output.xml
       
+      # 上傳測試報告
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
