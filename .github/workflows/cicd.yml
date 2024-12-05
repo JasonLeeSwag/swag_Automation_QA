@@ -48,18 +48,37 @@ jobs:
       
       - name: Setup Chrome and ChromeDriver
         run: |
+          # Install Chrome
           sudo apt-get install -y google-chrome-stable
-          CHROME_VERSION=$(google-chrome --version | cut -d ' ' -f 3 | cut -d '.' -f 1)
-          wget https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/$CHROME_VERSION.0.6261.94/linux64/chromedriver-linux64.zip
+          
+          # Get Chrome version
+          CHROME_VERSION=$(google-chrome --version | cut -d " " -f 3)
+          CHROME_MAJOR_VERSION=$(echo $CHROME_VERSION | cut -d "." -f 1)
+          
+          # Install ChromeDriver
+          wget -q https://storage.googleapis.com/chrome-for-testing-public/$CHROME_VERSION/linux64/chromedriver-linux64.zip
           unzip chromedriver-linux64.zip
           sudo mv chromedriver-linux64/chromedriver /usr/local/bin/
           sudo chmod +x /usr/local/bin/chromedriver
+          
+          # Verify installations
+          echo "Chrome version: $(google-chrome --version)"
+          echo "ChromeDriver version: $(chromedriver --version)"
+          
+          # Start ChromeDriver
+          chromedriver --port=4444 &
+          sleep 2
 
       - name: Start Virtual Display
         run: |
           Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
           echo "Started Xvfb"
           sleep 3
+      
+      - name: Create Required Directories
+        run: |
+          mkdir -p results
+          mkdir -p rerun_results
       
       - name: Run Initial Tests
         id: initial_test
