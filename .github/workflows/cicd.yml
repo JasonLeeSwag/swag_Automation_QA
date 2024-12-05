@@ -1,39 +1,33 @@
 name: Weekly Automation Test
 
-# 設定觸發條件：每週一上午 10 點
-on: workflow_dispatch
-    # - cron: "0 10 * * 1"
+on:
+  schedule:
+    - cron: "0 10 * * 1"
+  workflow_dispatch:
 
 jobs:
   run_tests:
-    runs-on: ubuntu-latest  # 或 'macos-latest'
+    runs-on: ubuntu-latest
     steps:
-      # 檢出代碼
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 設置 Python 環境
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: 3.12
 
-      # 安裝依賴
       - name: Install Dependencies
         run: |
           python3 -m venv venv
           source venv/bin/activate
           pip install -r requirements.txt
 
-      # 運行 Robot Framework 測試
       - name: Run Tests
         run: |
           source venv/bin/activate
           robot -V data.yaml -V country.yaml -V qat_domain.yaml -i login TestCase
-        env:
-          ROBOT_ENV: "test"
 
-      # 上傳測試報告到 GitHub Artifact
       - name: Upload Report Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -42,7 +36,6 @@ jobs:
             report.html
             reports/
 
-      # 將測試報告覆蓋到 GitHub Repository
       - name: Commit and Push Report
         run: |
           git config user.name "github-actions[bot]"
