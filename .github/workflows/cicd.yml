@@ -7,94 +7,34 @@ on:
 
 jobs:
   run_tests:
-    runs-on: ubuntu-latest  # 改用 Ubuntu 因為它對自動化測試支援較好
+    runs-on: ubuntu-latest
     
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
       
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          check-latest: true
-
-      # 安裝虛擬顯示服務和依賴
-      - name: Install Display Service
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
-          sudo apt-get install -y libgconf-2-4 libatk1.0-0 libatk-bridge2.0-0 libgdk-pixbuf2.0-0 libgtk-3-0 libgbm-dev libnss3-dev libxss1
+      # 設置 Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
       
-      # 安裝最新版 Chrome
-      - name: Install Chrome
+      # 建立並運行 Docker 容器
+      - name: Build and Run Docker
         run: |
-          wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-          sudo apt install ./google-chrome-stable_current_amd64.deb
-          google-chrome --version
+          docker build -t swag-test -f swag_Automation_QA/Dockerfile .
+          docker run \
+            -v ${PWD}/swag_Automation_QA:/app/swag_Automation_QA \
+            -v ${PWD}/results:/app/results \
+            swag-test \
+            robot \
+              --variable BROWSER:chrome \
+              --outputdir /app/results \
+              --pythonpath /app/swag_Automation_QA/keyword/swag \
+              --variablefile /app/swag_Automation_QA/data.yaml \
+              --variablefile /app/swag_Automation_QA/qat_domain.yaml \
+              --variablefile /app/swag_Automation_QA/country.yaml \
+              -i login /app/swag_Automation_QA/TestCase
       
-      # 安裝 ChromeDriver
-      - name: Install ChromeDriver
-        run: |
-          CHROME_VERSION=$(google-chrome --version | cut -d ' ' -f 3 | cut -d '.' -f 1)
-          wget https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/$CHROME_VERSION.0.6261.94/linux64/chromedriver-linux64.zip
-          unzip chromedriver-linux64.zip
-          sudo mv chromedriver-linux64/chromedriver /usr/local/bin/
-          sudo chmod +x /usr/local/bin/chromedriver
-          chromedriver --version
-
-      # 創建必要目錄結構和檔案
-      - name: Create Required Structure
-        run: |
-          mkdir -p swag_Automation_QA/keyword/swag/
-          cat << 'EOF' > swag_Automation_QA/keyword/swag/Swag.sources.robot
-          *** Settings ***
-          Library    SeleniumLibrary
-          
-          *** Keywords ***
-          開啟Chrome瀏覽器
-              ${chrome_options}=    Evaluate    selenium.webdriver.ChromeOptions()
-              Call Method    ${chrome_options}    add_argument    --headless
-              Call Method    ${chrome_options}    add_argument    --no-sandbox
-              Call Method    ${chrome_options}    add_argument    --disable-dev-shm-usage
-              Call Method    ${chrome_options}    add_argument    --disable-gpu
-              Call Method    ${chrome_options}    add_argument    --window-size=1920,1080
-              Create Webdriver    Chrome    chrome_options=${chrome_options}
-              Set Window Size    1920    1080
-          
-          關閉所有瀏覽器
-              Close All Browsers
-          EOF
-      
-      - name: Install Python Dependencies
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install robotframework
-          pip install robotframework-seleniumlibrary
-          pip install selenium
-          pip install -r swag_Automation_QA/requirements.txt
-      
-      # 啟動虛擬顯示服務
-      - name: Start Virtual Display
-        run: |
-          Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
-          echo "Started Xvfb"
-          sleep 3
-      
-      # 運行測試
-      - name: Run Tests
-        env:
-          DISPLAY: :99
-        run: |
-          robot \
-            --variable BROWSER:chrome \
-            --outputdir results \
-            --pythonpath swag_Automation_QA/keyword/swag \
-            --variablefile swag_Automation_QA/data.yaml \
-            --variablefile swag_Automation_QA/qat_domain.yaml \
-            --variablefile swag_Automation_QA/country.yaml \
-            -i login swag_Automation_QA/TestCase
-      
+      # 上傳測試結果
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
         if: always()
