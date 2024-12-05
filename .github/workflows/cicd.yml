@@ -44,11 +44,29 @@ jobs:
           pip install selenium
           pip install -r swag_Automation_QA/requirements.txt
       
-      - name: Verify Setup
+      # 新增：檢查目錄結構和檔案
+      - name: Check Directory Structure
         run: |
-          /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version
-          chromedriver --version
-          python -c "import selenium; print('Selenium version:', selenium.__version__)"
+          echo "Current directory:"
+          pwd
+          echo "\nDirectory contents:"
+          ls -R
+          
+          echo "\nVerifying YAML files:"
+          ls -l swag_Automation_QA/*.yaml
+          
+          echo "\nVerifying Robot Resource files:"
+          ls -l swag_Automation_QA/keyword/swag/
+
+      # 新增：創建必要的目錄結構
+      - name: Create Required Directories
+        run: |
+          mkdir -p swag_Automation_QA/keyword/swag/
+          
+      # 新增：複製關鍵字文件
+      - name: Copy Robot Resource Files
+        run: |
+          cp swag_Automation_QA/keyword/Swag.sources.robot swag_Automation_QA/keyword/swag/
       
       - name: Run Tests
         env:
@@ -60,6 +78,8 @@ jobs:
           robot \
             --variable BROWSER:chrome \
             --outputdir results \
+            --pythonpath swag_Automation_QA/keyword \
+            --pythonpath swag_Automation_QA/keyword/swag \
             -V swag_Automation_QA/data.yaml \
             -V swag_Automation_QA/qat_domain.yaml \
             -V swag_Automation_QA/country.yaml \
