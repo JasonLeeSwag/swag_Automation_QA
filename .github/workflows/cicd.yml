@@ -110,7 +110,7 @@ jobs:
             --merge \
             results/output.xml \
             rerun_results/output.xml
-      
+
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
