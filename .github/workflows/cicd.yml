@@ -9,13 +9,16 @@ jobs:
   run_tests:
     runs-on: macos-latest  # 使用 macOS 環境
     steps:
+      # 檢出代碼
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # 安裝 Chrome 瀏覽器
       - name: Install Chrome
         run: |
           brew install --cask google-chrome
 
+      # 創建虛擬環境並安裝依賴
       - name: Setup Python Virtual Environment
         run: |
           python3 -m venv venv
@@ -23,16 +26,20 @@ jobs:
           python3 -m pip install --upgrade pip setuptools
           pip install -r swag_Automation_QA/requirements.txt
 
+      # 確保測試所需的文件存在
       - name: Copy Required Files
         run: |
+          mkdir -p /app
           cp swag_Automation_QA/data.yaml /app/data.yaml
           cp swag_Automation_QA/qat_domain.yaml /app/qat_domain.yaml
 
+      # 運行測試
       - name: Run Tests
         run: |
           source venv/bin/activate
           robot -V /app/data.yaml -V /app/qat_domain.yaml -i login swag_Automation_QA/TestCase
 
+      # 上傳測試報告到 GitHub Artifact
       - name: Upload Report Artifact
         uses: actions/upload-artifact@v4
         with:
