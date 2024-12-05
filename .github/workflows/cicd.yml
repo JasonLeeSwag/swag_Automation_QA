@@ -2,31 +2,36 @@ name: Weekly Automation Test
 
 on:
   schedule:
-    - cron: "0 10 * * 1"
-  workflow_dispatch:
+    - cron: "0 10 * * 1"  # 每週一上午 10 點觸發
+  workflow_dispatch:       # 手動觸發
 
 jobs:
   run_tests:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest  # 使用 macOS 環境
     steps:
+      # 檢出代碼
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: List Files
-        run: ls -R
+      # 升級 pip 和 setuptools，避免依賴問題
+      - name: Upgrade pip and setuptools
+        run: |
+          python3 -m pip install --upgrade pip setuptools
 
+      # 安裝依賴
       - name: Install Dependencies
         run: |
           python3 -m venv venv
           source venv/bin/activate
-          pip install --upgrade pip
           pip install -r swag_Automation_QA/requirements.txt
 
+      # 運行 Robot Framework 測試
       - name: Run Tests
         run: |
           source venv/bin/activate
           robot -V swag_Automation_QA/data.yaml -V swag_Automation_QA/country.yaml -V swag_Automation_QA/qat_domain.yaml -i login swag_Automation_QA/TestCase
 
+      # 上傳測試報告到 GitHub Artifact
       - name: Upload Report Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -35,6 +40,7 @@ jobs:
             swag_Automation_QA/report.html
             swag_Automation_QA/reports/
 
+      # 將測試報告推送到 GitHub Repository
       - name: Commit and Push Report
         run: |
           git config user.name "github-actions[bot]"
