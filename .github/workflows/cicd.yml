@@ -39,6 +39,7 @@ jobs:
       ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
       TEST_TYPE: ${{ (github.event_name == 'schedule' || github.event_name == 'pull_request') && 'bvt' || inputs.test_type }}
       PYTHONPATH: ${GITHUB_WORKSPACE}/swag_Automation_QA/robotframework/robot_lib
+      DISPLAY: :0
     
     steps:
       - name: 檢出程式碼
@@ -49,19 +50,28 @@ jobs:
         with:
           python-version: '3.12'
           
-      - name: 安裝 Chrome 和相關工具
+      - name: 設定虛擬顯示器
+        run: |
+          brew install screenresolution
+          screenresolution set 1920x1080x32@60
+          
+      - name: 安裝並配置 Chrome
         run: |
           # 安裝 Chrome
-          brew install --cask google-chrome-for-testing
+          brew install --cask google-chrome
           
           # 安裝 ChromeDriver
           brew install --cask chromedriver
           
-          # 啟動 ChromeDriver
+          # 啟動 ChromeDriver 服務
           chromedriver --version
           
-          # 確認 Chrome 安裝
-          /Applications/Google\ Chrome\ for\ Testing.app/Contents/MacOS/Google\ Chrome\ for\ Testing --version
+          # 檢查 Chrome 版本
+          /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version
+          
+          # 設定 Chrome 權限
+          sudo xattr -d com.apple.quarantine /Applications/Google\ Chrome.app
+          sudo xattr -d com.apple.quarantine $(which chromedriver)
           
       - name: 安裝 Python 套件
         run: |
@@ -81,27 +91,48 @@ jobs:
             pyOpenSSL==24.2.1 \
             Faker==27.0.0
 
+      - name: 建立 Chrome 設定檔
+        run: |
+          mkdir -p /Users/runner/Library/Application\ Support/Google/Chrome
+          echo '{
+            "profile": {
+              "default_content_settings": {
+                "popups": 1
+              },
+              "content_settings": {
+                "notifications": {
+                  "default": "allow"
+                }
+              }
+            }
+          }' > /Users/runner/Library/Application\ Support/Google/Chrome/Default/Preferences
+          
       - name: 確認環境設定
         run: |
           echo "Python PATH: $PYTHONPATH"
           python -c "import selenium; print('Selenium version:', selenium.__version__)"
           python -c "import pyotp; print('PyOTP version:', pyotp.__version__)"
           chromedriver --version
-          /Applications/Google\ Chrome\ for\ Testing.app/Contents/MacOS/Google\ Chrome\ for\ Testing --version
+          /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version
           
       - name: 執行自動化測試
         id: initial_test
         continue-on-error: true
         env:
-          ROBOT_OPTIONS: "--variable BROWSER:chrome --variable OPTIONS:--no-sandbox --disable-gpu --window-size=1920,1080"
+          ROBOT_OPTIONS: "--variable BROWSER:chrome"
         run: |
           cd swag_Automation_QA
           
-          # 設定 Chrome 選項
+          # 設定 Python 路徑
           export PYTHONPATH=$PYTHONPATH:${GITHUB_WORKSPACE}/swag_Automation_QA/robotframework/robot_lib
+          
+          # 檢查目錄結構
+          ls -la
           
           # 執行測試
           robot \
+            -v BROWSER:chrome \
+            -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080')" \
             -V data.yaml \
             -V country.yaml \
             -V ${ENVIRONMENT}_domain.yaml \
@@ -116,6 +147,8 @@ jobs:
           if [ -f "output.xml" ]; then
             robot \
               --rerunfailed output.xml \
+              -v BROWSER:chrome \
+              -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080')" \
               -V data.yaml \
               -V country.yaml \
               -V ${ENVIRONMENT}_domain.yaml \
