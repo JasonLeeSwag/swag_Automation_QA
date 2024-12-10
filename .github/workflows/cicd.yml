@@ -1,8 +1,9 @@
+# .github/workflows/cicd.yml
 name: Weekly Automation Test
 
 on:
   schedule:
-    - cron: "*/30 * * * *"  # 每半小時執行一次
+    - cron: "0 1 * * 1"  # 每週一早上 9 點 (UTC +8)
   workflow_dispatch:
     inputs:
       environment:
@@ -19,103 +20,43 @@ jobs:
     runs-on: ubuntu-latest
     
     env:
-      ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
+      ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || github.event.inputs.environment }}
       
     steps:
       - name: Clean Workspace
         run: rm -rf *
-      
+
       - name: Checkout Code
         uses: actions/checkout@v4
-      
-      - name: Setup Python Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-full python3-pip xvfb
-          python3 -m venv venv
-          source venv/bin/activate
-          pip install --upgrade pip
-          pip install \
-            robotframework \
-            robotframework-seleniumlibrary \
-            robotframework-requests \
-            robotframework-jsonlibrary \
-            selenium \
-            requests \
-            pyyaml
 
-      - name: Setup Chrome and ChromeDriver
+      - name: Setup Docker Environment
         run: |
-          sudo apt-get install -y google-chrome-stable
-          CHROME_VERSION=$(google-chrome --version | cut -d ' ' -f 3)
-          CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE")
-          curl -Lo chromedriver_linux64.zip "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip"
-          unzip chromedriver_linux64.zip
-          sudo mv chromedriver /usr/local/bin/
-          sudo chmod +x /usr/local/bin/chromedriver
-          
-          google-chrome --version
-          chromedriver --version
+          docker build -t swag-automation-qa .
+          docker run -d --name automation-test-container \
+            -e ENVIRONMENT=${{ env.ENVIRONMENT }} \
+            swag-automation-qa
 
-      - name: Start Virtual Display
+      - name: Execute Tests in Docker
         run: |
-          Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
-          echo "Starting Xvfb..."
-          sleep 3
-      
-      - name: Run Initial Tests
-        id: initial_test
-        continue-on-error: true
-        env:
-          DISPLAY: :99
-        run: |
-          source venv/bin/activate
-          mkdir -p results
-          cd swag_Automation_QA
-          robot \
-            -V data.yaml \
-            -V country.yaml \
-            -V ${ENVIRONMENT}_domain.yaml \
-            -i login \
-            --outputdir ../results \
-            --dryrun \
-            TestCase
+          docker exec automation-test-container /bin/bash -c "
+          source /venv/bin/activate && \
+          mkdir -p /results && \
+          cd /swag_Automation_QA && \
+          robot -V data.yaml -V country.yaml -V ${ENVIRONMENT}_domain.yaml \
+          -i login \
+          --outputdir /results \
+          TestCase"
 
-      - name: Rerun Failed Tests
-        if: steps.initial_test.outcome == 'failure'
-        continue-on-error: true
-        env:
-          DISPLAY: :99
-        run: |
-          source venv/bin/activate
-          mkdir -p rerun_results
-          cd swag_Automation_QA
-          robot \
-            --rerunfailed ../results/output.xml \
-            -V data.yaml \
-            -V country.yaml \
-            -V ${ENVIRONMENT}_domain.yaml \
-            -i login \
-            --outputdir ../rerun_results \
-            TestCase
+      - name: Collect Test Results
+        run: docker cp automation-test-container:/results ./results
 
-      - name: Merge Test Results
-        if: steps.initial_test.outcome == 'failure' && steps.rerun.outcome == 'success'
-        env:
-          DISPLAY: :99
+      - name: Stop and Remove Docker Container
         run: |
-          source venv/bin/activate
-          rebot \
-            --output results/output.xml \
-            --merge \
-            results/output.xml \
-            rerun_results/output.xml
+          docker stop automation-test-container
+          docker rm automation-test-container
 
       - name: Upload Test Results
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: |
-            results/
-            rerun_results/
+          path: results/
