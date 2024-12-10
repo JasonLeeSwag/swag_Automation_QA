@@ -39,31 +39,29 @@ jobs:
       ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
       TEST_TYPE: ${{ (github.event_name == 'schedule' || github.event_name == 'pull_request') && 'bvt' || inputs.test_type }}
       PYTHONPATH: ${{ github.workspace }}/swag_Automation_QA/robotframework/robot_lib
-      ROBOT_ARGS: --outputdir results
+      OBJC_DISABLE_INITIALIZE_FORK_SAFETY: YES
     
     steps:
-      - name: 清理環境
+      - name: 清理工作區
         run: |
           rm -rf *
           rm -rf .git*
-          # 清理 Python 緩存
-          find . -type d -name "__pycache__" -exec rm -rf {} +
           
       - name: 檢出程式碼
         uses: actions/checkout@v4
 
       - name: 設定 Python 環境
         run: |
-          # 確保使用系統 Python
-          which python3
-          python3 -m venv venv
+          # 使用 Rosetta 2 創建 x86_64 Python 環境
+          arch -x86_64 python3 -m venv venv
           source venv/bin/activate
           python3 -m pip install --upgrade pip
-          
-      - name: 安裝 Python 套件
+
+      - name: 安裝依賴套件
         run: |
-          # 強制重新安裝套件以確保架構正確
-          ARCHFLAGS="-arch arm64" pip install --force-reinstall \
+          source venv/bin/activate
+          # 使用 Rosetta 2 安裝套件
+          arch -x86_64 pip install \
             robotframework==7.0.1 \
             robotframework-seleniumlibrary==6.3.0 \
             robotframework-selenium2library==3.0.0 \
@@ -79,37 +77,40 @@ jobs:
             Faker==27.0.0 \
             webdriver-manager==4.0.2 \
             robotframework-jsonvalidator==2.0.0 \
-            robotframework-debuglibrary==2.5.0
+            robotframework-debuglibrary==2.5.0 \
+            charset-normalizer
 
       - name: 設定 Chrome
         run: |
-          # 確保 Chrome 是最新版本
-          brew upgrade --cask google-chrome || brew install --cask google-chrome
-          # 安裝對應版本的 ChromeDriver
-          brew upgrade --cask chromedriver || brew install --cask chromedriver
+          # 安裝 Chrome
+          brew install --cask google-chrome
+          
+          # 安裝 ChromeDriver
+          brew install --cask chromedriver
           
           # 設定權限
           sudo xattr -rd com.apple.quarantine /Applications/Google\ Chrome.app || true
           sudo xattr -rd com.apple.quarantine $(which chromedriver) || true
           
+          # 創建 Chrome 使用者設定檔目錄
+          mkdir -p ~/Library/Application\ Support/Google/Chrome/Default
+          
           # 檢查版本
-          chrome_version=$(/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version | cut -d " " -f 3)
-          chromedriver_version=$(chromedriver --version | cut -d " " -f 2)
-          echo "Chrome version: $chrome_version"
-          echo "ChromeDriver version: $chromedriver_version"
+          /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version
+          chromedriver --version
 
       - name: 執行測試
         id: test
         continue-on-error: true
         run: |
+          source venv/bin/activate
           cd swag_Automation_QA
-          source ../venv/bin/activate
           
           # 設定環境變數
           export PYTHONPATH=$PWD/robotframework/robot_lib:$PYTHONPATH
-          export ROBOT_SUITENAMES="TestCase"
+          export DISPLAY=:0
           
-          # 建立結果目錄
+          # 確保目錄存在
           mkdir -p results
           
           # 執行測試
@@ -117,7 +118,7 @@ jobs:
             -v BROWSER:chrome \
             -v SELENIUM_TIMEOUT:60 \
             -v SELENIUM_IMPLICIT_WAIT:30 \
-            -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080');add_argument('--disable-notifications');add_argument('--enable-automation');add_argument('--remote-debugging-port=9222')" \
+            -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080');add_argument('--disable-notifications');add_argument('--disable-popup-blocking');add_argument('--remote-debugging-port=9222');add_argument('--disable-features=TranslateUI')" \
             -V data.yaml \
             -V country.yaml \
             -V ${ENVIRONMENT}_domain.yaml \
@@ -141,3 +142,4 @@ jobs:
           pkill -f "Google Chrome" || true
           pkill -f "chromedriver" || true
           rm -rf venv
+          rm -rf ~/Library/Application\ Support/Google/Chrome/Default/*
