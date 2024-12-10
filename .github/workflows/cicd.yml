@@ -50,28 +50,17 @@ jobs:
         with:
           python-version: '3.12'
           
-      - name: 設定虛擬顯示器
-        run: |
-          brew install screenresolution
-          screenresolution set 1920x1080x32@60
-          
       - name: 安裝並配置 Chrome
         run: |
-          # 安裝 Chrome
-          brew install --cask google-chrome
+          # 安裝 Chrome 和 ChromeDriver
+          brew install --cask google-chrome chromedriver
           
-          # 安裝 ChromeDriver
-          brew install --cask chromedriver
+          # 設定 ChromeDriver 權限
+          chmod +x $(which chromedriver)
           
-          # 啟動 ChromeDriver 服務
+          # 檢查版本
           chromedriver --version
-          
-          # 檢查 Chrome 版本
           /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version
-          
-          # 設定 Chrome 權限
-          sudo xattr -d com.apple.quarantine /Applications/Google\ Chrome.app
-          sudo xattr -d com.apple.quarantine $(which chromedriver)
           
       - name: 安裝 Python 套件
         run: |
@@ -93,17 +82,21 @@ jobs:
 
       - name: 建立 Chrome 設定檔
         run: |
-          mkdir -p /Users/runner/Library/Application\ Support/Google/Chrome
+          mkdir -p /Users/runner/Library/Application\ Support/Google/Chrome/Default
           echo '{
             "profile": {
               "default_content_settings": {
-                "popups": 1
+                "popups": 1,
+                "notifications": 1
               },
-              "content_settings": {
-                "notifications": {
-                  "default": "allow"
-                }
+              "password_manager_enabled": false,
+              "default_content_setting_values": {
+                "notifications": 1,
+                "automatic_downloads": 1
               }
+            },
+            "browser": {
+              "enabled_labs_experiments": ["enable-force-dark"]
             }
           }' > /Users/runner/Library/Application\ Support/Google/Chrome/Default/Preferences
           
@@ -112,14 +105,14 @@ jobs:
           echo "Python PATH: $PYTHONPATH"
           python -c "import selenium; print('Selenium version:', selenium.__version__)"
           python -c "import pyotp; print('PyOTP version:', pyotp.__version__)"
-          chromedriver --version
-          /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version
+          ls -la /Applications/Google\ Chrome.app/Contents/MacOS/
+          ls -la $(which chromedriver)
           
       - name: 執行自動化測試
         id: initial_test
         continue-on-error: true
         env:
-          ROBOT_OPTIONS: "--variable BROWSER:chrome"
+          SE_START_XVFB: "false"
         run: |
           cd swag_Automation_QA
           
@@ -132,7 +125,9 @@ jobs:
           # 執行測試
           robot \
             -v BROWSER:chrome \
-            -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080')" \
+            -v SELENIUM_TIMEOUT:30 \
+            -v SELENIUM_IMPLICIT_WAIT:10 \
+            -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080');add_argument('--disable-notifications');add_argument('--enable-automation');add_argument('--disable-popup-blocking')" \
             -V data.yaml \
             -V country.yaml \
             -V ${ENVIRONMENT}_domain.yaml \
@@ -148,7 +143,9 @@ jobs:
             robot \
               --rerunfailed output.xml \
               -v BROWSER:chrome \
-              -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080')" \
+              -v SELENIUM_TIMEOUT:30 \
+              -v SELENIUM_IMPLICIT_WAIT:10 \
+              -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080');add_argument('--disable-notifications');add_argument('--enable-automation');add_argument('--disable-popup-blocking')" \
               -V data.yaml \
               -V country.yaml \
               -V ${ENVIRONMENT}_domain.yaml \
@@ -161,7 +158,7 @@ jobs:
         continue-on-error: true
         run: |
           cd swag_Automation_QA
-          if [ -f "output.xml" ] && [ -f "output.xml" ]; then
+          if [ -f "output.xml" ]; then
             rebot \
               --output merged-output.xml \
               --merge \
