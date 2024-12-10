@@ -38,10 +38,9 @@ jobs:
     env:
       ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
       TEST_TYPE: ${{ (github.event_name == 'schedule' || github.event_name == 'pull_request') && 'bvt' || inputs.test_type }}
-      DISPLAY: ":0"  # 設定顯示器
+      DISPLAY: ":0"
       PYTHONPATH: ${{ github.workspace }}/swag_Automation_QA/robotframework/robot_lib
-      PATH: ${{ github.workspace }}/chromedriver:${{ env.PATH }}
-    
+      
     steps:
       - name: 清理工作目錄
         run: |
@@ -50,6 +49,11 @@ jobs:
       
       - name: 檢出程式碼
         uses: actions/checkout@v4
+
+      - name: 設定環境變數
+        run: |
+          echo "${{ github.workspace }}/chromedriver" >> $GITHUB_PATH
+          echo "PATH=$PATH:${{ github.workspace }}/chromedriver" >> $GITHUB_ENV
 
       - name: 驗證 Python 環境
         run: |
@@ -76,8 +80,8 @@ jobs:
           fi
           
           # 設定權限
-          sudo xattr -r -d com.apple.quarantine /Applications/Google\ Chrome.app || true
-          sudo xattr -r -d com.apple.quarantine $(which chromedriver) || true
+          xattr -r -d com.apple.quarantine /Applications/Google\ Chrome.app || true
+          xattr -r -d com.apple.quarantine $(which chromedriver) || true
           
       - name: 安裝 Python 套件
         run: |
