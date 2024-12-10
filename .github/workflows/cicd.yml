@@ -2,7 +2,7 @@ name: SWAG 自動化測試
 
 on:
   schedule:
-    - cron: '0 9 * * 1'
+    - cron: '0 9 * * 1'  # 每週一早上 9:00 執行
   
   pull_request:
     types: [opened, synchronize, reopened]
@@ -33,65 +33,92 @@ on:
 
 jobs:
   test:
-    runs-on: macos-latest
+    runs-on: [self-hosted, macos]  # 使用自託管的 Mac runner
     
     env:
       ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
       TEST_TYPE: ${{ (github.event_name == 'schedule' || github.event_name == 'pull_request') && 'bvt' || inputs.test_type }}
-      CI: true
+      DISPLAY: ":0"  # 設定顯示器
+      PYTHONPATH: ${{ github.workspace }}/swag_Automation_QA/robotframework/robot_lib
+      PATH: ${{ github.workspace }}/chromedriver:${{ env.PATH }}
     
     steps:
+      - name: 清理工作目錄
+        run: |
+          rm -rf *
+          rm -rf .git*
+      
       - name: 檢出程式碼
         uses: actions/checkout@v4
 
-      - name: 設定 Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: 安裝 Chrome 和 ChromeDriver
+      - name: 驗證 Python 環境
         run: |
-          # 安裝 Chrome
-          brew install --cask google-chrome
+          python3 --version
+          which python3
+          echo "確認 Python 安裝路徑: $(which python3)"
           
-          # 安裝 ChromeDriver
-          brew install --cask chromedriver
+      - name: 驗證 Chrome 環境
+        run: |
+          # 檢查 Chrome 是否已安裝
+          if ! [ -d "/Applications/Google Chrome.app" ]; then
+            echo "Chrome 未安裝，正在安裝..."
+            brew install --cask google-chrome
+          else
+            echo "Chrome 已安裝: $(/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version)"
+          fi
+          
+          # 檢查 ChromeDriver 是否已安裝
+          if ! which chromedriver > /dev/null; then
+            echo "ChromeDriver 未安裝，正在安裝..."
+            brew install --cask chromedriver
+          else
+            echo "ChromeDriver 已安裝: $(chromedriver --version)"
+          fi
           
           # 設定權限
-          sudo xattr -r -d com.apple.quarantine /Applications/Google\ Chrome.app
-          sudo xattr -r -d com.apple.quarantine $(which chromedriver)
-          
-          # 設定 ChromeDriver 路徑
-          echo "CHROMEDRIVER_PATH=$(which chromedriver)" >> $GITHUB_ENV
+          sudo xattr -r -d com.apple.quarantine /Applications/Google\ Chrome.app || true
+          sudo xattr -r -d com.apple.quarantine $(which chromedriver) || true
           
       - name: 安裝 Python 套件
         run: |
-          python -m pip install --upgrade pip
-          pip install \
-            robotframework==7.0.1 \
-            robotframework-seleniumlibrary==6.3.0 \
-            robotframework-selenium2library==3.0.0 \
-            selenium==4.23.1 \
-            pyotp==2.9.0 \
-            robotframework-requests==0.9.7 \
-            robotframework-jsonlibrary==0.5 \
-            requests==2.32.3 \
-            PyYAML==6.0.2 \
-            python-dotenv==1.0.1 \
-            cryptography==43.0.0 \
-            pyOpenSSL==24.2.1 \
-            Faker==27.0.0 \
-            webdriver-manager==4.0.2 \
-            robotframework-jsonvalidator==2.0.0 \
-            robotframework-debuglibrary==2.5.0
+          python3 -m pip install --upgrade pip
+          
+          # 建立 requirements.txt
+          cat << EOF > requirements.txt
+          robotframework==7.0.1
+          robotframework-seleniumlibrary==6.3.0
+          robotframework-selenium2library==3.0.0
+          selenium==4.23.1
+          pyotp==2.9.0
+          robotframework-requests==0.9.7
+          robotframework-jsonlibrary==0.5
+          requests==2.32.3
+          PyYAML==6.0.2
+          python-dotenv==1.0.1
+          cryptography==43.0.0
+          pyOpenSSL==24.2.1
+          Faker==27.0.0
+          webdriver-manager==4.0.2
+          robotframework-jsonvalidator==2.0.0
+          robotframework-debuglibrary==2.5.0
+          EOF
+          
+          # 安裝套件
+          pip install -r requirements.txt
 
       - name: 執行自動化測試
         id: initial_test
         continue-on-error: true
-        env:
-          PYTHONPATH: ${{ github.workspace }}/swag_Automation_QA/robotframework/robot_lib
         run: |
           cd swag_Automation_QA
+          
+          # 設定環境變數
+          export DISPLAY=:0
+          export PYTHONPATH=$PWD/robotframework/robot_lib:$PYTHONPATH
+          
+          # 檢查目錄結構
+          echo "當前目錄結構:"
+          ls -la
           
           # 執行測試
           robot \
@@ -116,3 +143,14 @@ jobs:
             swag_Automation_QA/report.html
             swag_Automation_QA/reports/
           if-no-files-found: warn
+          
+      - name: 清理環境
+        if: always()
+        run: |
+          # 關閉所有相關進程
+          pkill -f "Google Chrome" || true
+          pkill -f "chromedriver" || true
+          
+          # 清理暫存檔
+          rm -rf ~/Library/Caches/Google/Chrome/Default/*
+          rm -rf ~/Library/Application\ Support/Google/Chrome/Default/Cache/*
