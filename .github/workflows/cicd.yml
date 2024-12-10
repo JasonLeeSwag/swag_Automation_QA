@@ -55,22 +55,19 @@ jobs:
           
       - name: 下載並設定 ChromeDriver
         run: |
-          # 獲取 Chrome 版本
-          CHROME_VERSION=$(defaults read /Applications/Google\ Chrome.app/Contents/Info.plist KSVersion)
-          echo "Chrome version: $CHROME_VERSION"
+          # 安裝 ChromeDriver
+          brew install --cask chromedriver
           
-          # 下載對應版本的 ChromeDriver
-          mkdir -p chromedriver
-          cd chromedriver
+          # 設定 ChromeDriver 權限
+          sudo xattr -r -d com.apple.quarantine $(which chromedriver)
+          chmod +x $(which chromedriver)
           
-          curl -LO "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/$(echo $CHROME_VERSION | cut -d. -f1-3)/mac-arm64/chromedriver-mac-arm64.zip"
-          unzip chromedriver-mac-arm64.zip
-          mv chromedriver-mac-arm64/chromedriver ../
-          cd ..
-          chmod +x chromedriver
+          # 獲取 ChromeDriver 路徑
+          CHROMEDRIVER_PATH=$(which chromedriver)
+          echo "CHROMEDRIVER_PATH=$CHROMEDRIVER_PATH" >> $GITHUB_ENV
           
-          # 設定環境變數
-          echo "CHROMEDRIVER_PATH=$PWD/chromedriver" >> $GITHUB_ENV
+          # 檢查版本
+          chromedriver --version
           
       - name: 安裝 Python 套件
         run: |
@@ -100,11 +97,14 @@ jobs:
           echo "CHROMEDRIVER_PATH: $CHROMEDRIVER_PATH"
           
           echo "=== Chrome 和 ChromeDriver 版本 ==="
-          $CHROMEDRIVER_PATH --version
+          chromedriver --version
           /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version
           
           echo "=== Python 套件 ==="
           pip list
+          
+          echo "=== 目錄結構 ==="
+          ls -la $GITHUB_WORKSPACE/swag_Automation_QA/robotframework/robot_lib
           
       - name: 執行自動化測試
         id: initial_test
@@ -114,16 +114,17 @@ jobs:
         run: |
           cd swag_Automation_QA
           
-          # 建立符號連結到 ChromeDriver
+          # 創建必要的目錄
           mkdir -p robotframework/robot_lib/chromedriver
-          ln -s $CHROMEDRIVER_PATH robotframework/robot_lib/chromedriver/
+          cp $(which chromedriver) robotframework/robot_lib/chromedriver/
+          chmod +x robotframework/robot_lib/chromedriver/chromedriver
           
           # 執行測試
           robot \
             -v BROWSER:chrome \
             -v SELENIUM_TIMEOUT:30 \
             -v SELENIUM_IMPLICIT_WAIT:10 \
-            -v CHROMEDRIVER_PATH:$CHROMEDRIVER_PATH \
+            -v CHROMEDRIVER_PATH:$(which chromedriver) \
             -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080');add_argument('--disable-notifications');add_argument('--enable-automation')" \
             -V data.yaml \
             -V country.yaml \
@@ -142,7 +143,7 @@ jobs:
               -v BROWSER:chrome \
               -v SELENIUM_TIMEOUT:30 \
               -v SELENIUM_IMPLICIT_WAIT:10 \
-              -v CHROMEDRIVER_PATH:$CHROMEDRIVER_PATH \
+              -v CHROMEDRIVER_PATH:$(which chromedriver) \
               -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080');add_argument('--disable-notifications');add_argument('--enable-automation')" \
               -V data.yaml \
               -V country.yaml \
