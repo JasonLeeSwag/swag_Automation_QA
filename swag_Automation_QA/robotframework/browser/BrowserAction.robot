@@ -32,45 +32,31 @@ Set Chrome Options
     ${is_ci}=    Is CI Environment
     
     ${chromeOptions}=    Evaluate    sys.modules["selenium.webdriver"].ChromeOptions()    sys, selenium.webdriver
+    
+    # 移動設備模擬
     ${mobile emulation}=    Create Dictionary    deviceName=iPhone X
-    Log    Chrome preferences : ${mobile emulation}
     Call Method    ${chromeOptions}    add_experimental_option    mobileEmulation    ${mobile emulation}
     
-    # 基本 Chrome 選項
-    ${base_args}=    Split String    ${DEFAULT_CHROME_OPTIONS}
-    FOR    ${arg}    IN    @{base_args}
-        Call Method    ${chromeOptions}    add_argument    ${arg}
-    END
-    
-    # 在 CI 環境中添加無頭模式選項
+    # 在 CI 環境中設置無頭模式
     IF    ${is_ci}
-        Call Method    ${chromeOptions}    add_argument    --headless=new
-        Call Method    ${chromeOptions}    add_argument    --window-size=1920,1080
-        Call Method    ${chromeOptions}    add_argument    --disable-dev-shm-usage
-    END
-    
-    RETURN    ${chromeOptions}
-
-Set Chrome Options - Web
-    ${is_ci}=    Is CI Environment
-    
-    ${chromeOptions}=    Evaluate    sys.modules["selenium.webdriver"].ChromeOptions()    sys, selenium.webdriver
-    ${prefs}=    Copy Dictionary    ${DEFAULT_PREFS}
-    Set To Dictionary    ${prefs}    download.default_directory=${DEFAULT_DOWNLOAD_DIR}
-    Log    Chrome preferences : ${prefs}
-    Call Method    ${chromeOptions}    add_experimental_option    prefs    ${prefs}
-    
-    # 基本 Chrome 選項
-    ${base_args}=    Split String    ${DEFAULT_CHROME_OPTIONS}
-    FOR    ${arg}    IN    @{base_args}
-        Call Method    ${chromeOptions}    add_argument    ${arg}
-    END
-    
-    # 在 CI 環境中添加無頭模式選項
-    IF    ${is_ci}
-        Call Method    ${chromeOptions}    add_argument    --headless=new
-        Call Method    ${chromeOptions}    add_argument    --window-size=1920,1080
-        Call Method    ${chromeOptions}    add_argument    --disable-dev-shm-usage
+        ${options}=    Create List
+        ...    --headless
+        ...    --disable-gpu
+        ...    --no-sandbox
+        ...    --disable-dev-shm-usage
+        ...    --window-size=1920,1080
+        FOR    ${option}    IN    @{options}
+            Call Method    ${chromeOptions}    add_argument    ${option}
+        END
+    ELSE
+        # 非 CI 環境的基本設置
+        ${options}=    Create List    
+        ...    --start-maximized
+        ...    --disable-gpu
+        ...    --no-sandbox
+        FOR    ${option}    IN    @{options}
+            Call Method    ${chromeOptions}    add_argument    ${option}
+        END
     END
     
     RETURN    ${chromeOptions}
@@ -86,6 +72,9 @@ Set Chrome Capabilities
     Get Chromedriver Path
     ${chrome_options}=    Set Chrome Options
     ${capabilities}=    Set Chrome Capabilities
+    
+    # 檢查並記錄 Chrome 設置
+    Log    Chrome options: ${chrome_options}
     
     Run Keyword If    "${REMOTE_URL}" == "${EMPTY}"
     ...    Create Webdriver    Chrome    options=${chrome_options}
