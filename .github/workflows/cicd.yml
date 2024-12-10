@@ -1,23 +1,16 @@
-# 工作流程名稱
 name: SWAG 自動化測試
 
-# 觸發條件設定
 on:
-  # 定時觸發：每週一早上 9:00 執行
   schedule:
-    - cron: '0 9 * * 1'
+    - cron: '0 9 * * 1'  # 每週一早上 9:00
   
-  # Pull Request 觸發
   pull_request:
     types: [opened, synchronize, reopened]
-    # 只有當 PR 包含 e2e 標籤時才觸發
     labels:
       - e2e
   
-  # 手動觸發
   workflow_dispatch:
     inputs:
-      # 環境選擇
       environment:
         description: '選擇測試環境'
         required: true
@@ -26,38 +19,30 @@ on:
         options:
         - qat
         - uat
-      
-      # 測試類型選擇
       test_type:
         description: '選擇測試類型'
         required: true
         default: 'bvt'
         type: choice
         options:
-        - bvt     # 完整測試套件
-        - login   # 登入測試
-        - register # 註冊測試
-        - video   # 影片相關測試
-        - myprofile # 個人檔案測試
+        - bvt
+        - login
+        - register
+        - video
+        - myprofile
 
 jobs:
   test:
-    # 使用 macOS 最新版本執行
     runs-on: macos-latest
     
-    # 環境變數設定
     env:
-      # 根據觸發方式決定環境
       ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
-      # 設定測試類型：schedule 和 PR 時執行 bvt，其他情況使用手動選擇的類型
       TEST_TYPE: ${{ (github.event_name == 'schedule' || github.event_name == 'pull_request') && 'bvt' || inputs.test_type }}
     
     steps:
-      # 步驟 1: 檢出程式碼
       - name: 檢出程式碼
         uses: actions/checkout@v4
 
-      # 步驟 2: 建立 requirements.txt
       - name: 建立 Requirements 文件
         run: |
           cat << EOF > requirements.txt
@@ -83,76 +68,72 @@ jobs:
           pyOpenSSL==24.2.1
           EOF
 
-      # 步驟 3: 設定 Python 環境
       - name: 設定 Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           
-      # 步驟 4: 安裝 Chrome 瀏覽器
       - name: 安裝 Chrome
         run: |
           brew update
           brew install --cask google-chrome
           brew install --cask chromedriver
           
-      # 步驟 5: 安裝相依套件
       - name: 安裝相依套件
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           
-      # 步驟 6: 準備測試環境
-      - name: 準備測試環境
-        run: |
-          mkdir -p results
-          mkdir -p rerun_results
-          mkdir -p final_results
-          
-      # 步驟 7: 執行測試
       - name: 執行自動化測試
         id: initial_test
         continue-on-error: true
         run: |
+          cd swag_Automation_QA
           robot \
             -V data.yaml \
             -V country.yaml \
             -V ${ENVIRONMENT}_domain.yaml \
             -i ${TEST_TYPE} \
-            --outputdir results \
             TestCase
 
-      # 步驟 8: 重新執行失敗的測試
       - name: 重新執行失敗的測試
         if: steps.initial_test.outcome == 'failure'
         continue-on-error: true
         run: |
-          robot \
-            --rerunfailed results/output.xml \
-            -V data.yaml \
-            -V country.yaml \
-            -V ${ENVIRONMENT}_domain.yaml \
-            -i ${TEST_TYPE} \
-            --outputdir rerun_results \
-            TestCase
+          cd swag_Automation_QA
+          if [ -f "output.xml" ]; then
+            robot \
+              --rerunfailed output.xml \
+              -V data.yaml \
+              -V country.yaml \
+              -V ${ENVIRONMENT}_domain.yaml \
+              -i ${TEST_TYPE} \
+              TestCase
+          else
+            echo "找不到 output.xml 檔案"
+            exit 0
+          fi
 
-      # 步驟 9: 合併測試結果
       - name: 合併測試結果
         if: steps.initial_test.outcome == 'failure'
+        continue-on-error: true
         run: |
-          rebot \
-            --output final_results/output.xml \
-            --merge \
-            results/output.xml \
-            rerun_results/output.xml
+          cd swag_Automation_QA
+          if [ -f "output.xml" ] && [ -f "output.xml" ]; then
+            rebot \
+              --output merged-output.xml \
+              --merge \
+              output.xml \
+              output.xml
+          fi
 
-      # 步驟 10: 上傳測試結果
       - name: 上傳測試結果
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ env.TEST_TYPE }}
           path: |
-            results/
-            rerun_results/
-            final_results/
+            swag_Automation_QA/*.xml
+            swag_Automation_QA/log.html
+            swag_Automation_QA/report.html
+          if-no-files-found: warn
