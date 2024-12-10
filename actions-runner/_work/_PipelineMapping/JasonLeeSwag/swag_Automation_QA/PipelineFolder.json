@@ -1,0 +1,12 @@
+﻿{
+  "repositoryName": "JasonLeeSwag/swag_Automation_QA",
+  "pipelineDirectory": "swag_Automation_QA",
+  "workspaceDirectory": "swag_Automation_QA/swag_Automation_QA",
+  "repositories": {
+    "JasonLeeSwag/swag_Automation_QA": {
+      "repositoryPath": "swag_Automation_QA/swag_Automation_QA",
+      "lastRunOn": "12/11/2024 01:22:53 +08:00"
+    }
+  },
+  "lastRunOn": "12/11/2024 01:22:53 +08:00"
+}

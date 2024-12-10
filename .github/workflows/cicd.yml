@@ -71,10 +71,20 @@ jobs:
             echo "Chrome 已安裝: $(/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version)"
           fi
           
+          # 檢查系統架構
+          ARCH=$(uname -m)
+          echo "系統架構: $ARCH"
+          
           # 檢查 ChromeDriver 是否已安裝
           if ! which chromedriver > /dev/null; then
             echo "ChromeDriver 未安裝，正在安裝..."
-            brew install --cask chromedriver
+            if [ "$ARCH" = "arm64" ]; then
+              # ARM 架構安裝
+              arch -arm64 brew install --cask chromedriver
+            else
+              # Intel 架構安裝
+              brew install --cask chromedriver
+            fi
           else
             echo "ChromeDriver 已安裝: $(chromedriver --version)"
           fi
@@ -82,6 +92,16 @@ jobs:
           # 設定權限
           xattr -r -d com.apple.quarantine /Applications/Google\ Chrome.app || true
           xattr -r -d com.apple.quarantine $(which chromedriver) || true
+          
+          # 驗證安裝
+          echo "驗證 Chrome 和 ChromeDriver 版本..."
+          chrome_version=$(/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version | cut -d " " -f 3)
+          chromedriver_version=$(chromedriver --version | cut -d " " -f 2)
+          echo "Chrome 版本: $chrome_version"
+          echo "ChromeDriver 版本: $chromedriver_version"
+          
+          # 設定 ChromeDriver 路徑
+          echo "CHROMEDRIVER_PATH=$(which chromedriver)" >> $GITHUB_ENV
           
       - name: 安裝 Python 套件
         run: |
