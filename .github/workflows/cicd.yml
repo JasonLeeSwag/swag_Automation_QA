@@ -38,6 +38,7 @@ jobs:
     env:
       ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
       TEST_TYPE: ${{ (github.event_name == 'schedule' || github.event_name == 'pull_request') && 'bvt' || inputs.test_type }}
+      CHROMEDRIVER_PATH: ${GITHUB_WORKSPACE}/chromedriver
     
     steps:
       - name: 檢出程式碼
@@ -52,12 +53,24 @@ jobs:
         run: |
           echo "PYTHONPATH=$GITHUB_WORKSPACE/swag_Automation_QA/robotframework/robot_lib" >> $GITHUB_ENV
           
-      - name: 安裝並配置 Chrome
+      - name: 下載並設定 ChromeDriver
         run: |
-          brew install --cask google-chrome chromedriver
-          chmod +x $(which chromedriver)
-          chromedriver --version
-          /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version
+          # 獲取 Chrome 版本
+          CHROME_VERSION=$(defaults read /Applications/Google\ Chrome.app/Contents/Info.plist KSVersion)
+          echo "Chrome version: $CHROME_VERSION"
+          
+          # 下載對應版本的 ChromeDriver
+          mkdir -p chromedriver
+          cd chromedriver
+          
+          curl -LO "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/$(echo $CHROME_VERSION | cut -d. -f1-3)/mac-arm64/chromedriver-mac-arm64.zip"
+          unzip chromedriver-mac-arm64.zip
+          mv chromedriver-mac-arm64/chromedriver ../
+          cd ..
+          chmod +x chromedriver
+          
+          # 設定環境變數
+          echo "CHROMEDRIVER_PATH=$PWD/chromedriver" >> $GITHUB_ENV
           
       - name: 安裝 Python 套件
         run: |
@@ -75,38 +88,43 @@ jobs:
             python-dotenv==1.0.1 \
             cryptography==43.0.0 \
             pyOpenSSL==24.2.1 \
-            Faker==27.0.0
+            Faker==27.0.0 \
+            webdriver-manager==4.0.2 \
+            robotframework-jsonvalidator==2.0.0 \
+            robotframework-debuglibrary==2.5.0
 
-      - name: 檢查環境設定
+      - name: 確認環境設定
         run: |
-          echo "=== Python 環境 ==="
+          echo "=== 環境變數 ==="
           echo "PYTHONPATH: $PYTHONPATH"
-          echo "Working Directory: $(pwd)"
+          echo "CHROMEDRIVER_PATH: $CHROMEDRIVER_PATH"
           
-          echo "=== 目錄結構 ==="
-          ls -la $GITHUB_WORKSPACE/swag_Automation_QA/robotframework/robot_lib
+          echo "=== Chrome 和 ChromeDriver 版本 ==="
+          $CHROMEDRIVER_PATH --version
+          /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version
           
           echo "=== Python 套件 ==="
           pip list
           
-          echo "=== Chrome 設定 ==="
-          which chromedriver
-          chromedriver --version
-          
       - name: 執行自動化測試
         id: initial_test
         continue-on-error: true
+        env:
+          webdriver_manager_path: ${CHROMEDRIVER_PATH}
         run: |
           cd swag_Automation_QA
           
-          # 建立輸出目錄
-          mkdir -p reports
+          # 建立符號連結到 ChromeDriver
+          mkdir -p robotframework/robot_lib/chromedriver
+          ln -s $CHROMEDRIVER_PATH robotframework/robot_lib/chromedriver/
           
+          # 執行測試
           robot \
             -v BROWSER:chrome \
             -v SELENIUM_TIMEOUT:30 \
             -v SELENIUM_IMPLICIT_WAIT:10 \
-            -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080');add_argument('--disable-notifications');add_argument('--enable-automation');add_argument('--disable-popup-blocking');add_argument('--remote-debugging-port=9222')" \
+            -v CHROMEDRIVER_PATH:$CHROMEDRIVER_PATH \
+            -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080');add_argument('--disable-notifications');add_argument('--enable-automation')" \
             -V data.yaml \
             -V country.yaml \
             -V ${ENVIRONMENT}_domain.yaml \
@@ -124,7 +142,8 @@ jobs:
               -v BROWSER:chrome \
               -v SELENIUM_TIMEOUT:30 \
               -v SELENIUM_IMPLICIT_WAIT:10 \
-              -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080');add_argument('--disable-notifications');add_argument('--enable-automation');add_argument('--disable-popup-blocking');add_argument('--remote-debugging-port=9222')" \
+              -v CHROMEDRIVER_PATH:$CHROMEDRIVER_PATH \
+              -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080');add_argument('--disable-notifications');add_argument('--enable-automation')" \
               -V data.yaml \
               -V country.yaml \
               -V ${ENVIRONMENT}_domain.yaml \
@@ -160,5 +179,5 @@ jobs:
       - name: 清理環境
         if: always()
         run: |
-          pkill -f "Google Chrome"
-          pkill -f "chromedriver"
+          pkill -f "Google Chrome" || true
+          pkill -f "chromedriver" || true
