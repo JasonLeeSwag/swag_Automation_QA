@@ -38,7 +38,7 @@ jobs:
     env:
       ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
       TEST_TYPE: ${{ (github.event_name == 'schedule' || github.event_name == 'pull_request') && 'bvt' || inputs.test_type }}
-      CHROMEDRIVER_PATH: ${GITHUB_WORKSPACE}/chromedriver
+      DISPLAY: :0
     
     steps:
       - name: 檢出程式碼
@@ -48,26 +48,41 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          
-      - name: 設定 PYTHONPATH
+
+      - name: 設定虛擬顯示器
         run: |
-          echo "PYTHONPATH=$GITHUB_WORKSPACE/swag_Automation_QA/robotframework/robot_lib" >> $GITHUB_ENV
+          # 安裝必要的套件
+          brew install screenresolution
           
-      - name: 下載並設定 ChromeDriver
+          # 設定螢幕解析度
+          screenresolution set 1920x1080x32@60
+          
+          # 安裝 XQuartz (X11)
+          brew install --cask xquartz
+          
+          # 啟動 XQuartz
+          open -a XQuartz
+          
+          # 等待 XQuartz 啟動
+          sleep 5
+          
+          # 設定 DISPLAY 環境變數
+          echo "DISPLAY=:0" >> $GITHUB_ENV
+          
+      - name: 安裝 Chrome 和 ChromeDriver
         run: |
+          # 安裝 Chrome
+          brew install --cask google-chrome
+          
           # 安裝 ChromeDriver
           brew install --cask chromedriver
           
-          # 設定 ChromeDriver 權限
+          # 設定權限
+          sudo xattr -r -d com.apple.quarantine /Applications/Google\ Chrome.app
           sudo xattr -r -d com.apple.quarantine $(which chromedriver)
-          chmod +x $(which chromedriver)
           
-          # 獲取 ChromeDriver 路徑
-          CHROMEDRIVER_PATH=$(which chromedriver)
-          echo "CHROMEDRIVER_PATH=$CHROMEDRIVER_PATH" >> $GITHUB_ENV
-          
-          # 檢查版本
-          chromedriver --version
+          # 設定 ChromeDriver 路徑
+          echo "CHROMEDRIVER_PATH=$(which chromedriver)" >> $GITHUB_ENV
           
       - name: 安裝 Python 套件
         run: |
@@ -90,34 +105,45 @@ jobs:
             robotframework-jsonvalidator==2.0.0 \
             robotframework-debuglibrary==2.5.0
 
-      - name: 確認環境設定
+      - name: 設定 Chrome 配置
         run: |
-          echo "=== 環境變數 ==="
-          echo "PYTHONPATH: $PYTHONPATH"
-          echo "CHROMEDRIVER_PATH: $CHROMEDRIVER_PATH"
-          
-          echo "=== Chrome 和 ChromeDriver 版本 ==="
-          chromedriver --version
-          /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version
-          
-          echo "=== Python 套件 ==="
-          pip list
-          
-          echo "=== 目錄結構 ==="
-          ls -la $GITHUB_WORKSPACE/swag_Automation_QA/robotframework/robot_lib
-          
+          mkdir -p ~/Library/Application\ Support/Google/Chrome
+          echo '{
+            "browser": {
+              "enabled_labs_experiments": [
+                "enable-force-dark",
+                "enable-quic"
+              ]
+            },
+            "profile": {
+              "default_content_setting_values": {
+                "notifications": 1,
+                "plugins": 1,
+                "popups": 1
+              },
+              "password_manager_enabled": false,
+              "default_content_settings": {
+                "popups": 1,
+                "notifications": 1
+              }
+            }
+          }' > ~/Library/Application\ Support/Google/Chrome/First\ Run
+
       - name: 執行自動化測試
         id: initial_test
         continue-on-error: true
         env:
-          webdriver_manager_path: ${CHROMEDRIVER_PATH}
+          DISPLAY: :0
         run: |
           cd swag_Automation_QA
           
-          # 創建必要的目錄
+          # 複製 ChromeDriver 到專案目錄
           mkdir -p robotframework/robot_lib/chromedriver
           cp $(which chromedriver) robotframework/robot_lib/chromedriver/
           chmod +x robotframework/robot_lib/chromedriver/chromedriver
+          
+          # 設定 Python 路徑
+          export PYTHONPATH=$PWD/robotframework/robot_lib:$PYTHONPATH
           
           # 執行測試
           robot \
@@ -125,7 +151,7 @@ jobs:
             -v SELENIUM_TIMEOUT:30 \
             -v SELENIUM_IMPLICIT_WAIT:10 \
             -v CHROMEDRIVER_PATH:$(which chromedriver) \
-            -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080');add_argument('--disable-notifications');add_argument('--enable-automation')" \
+            -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080');add_argument('--disable-notifications');add_argument('--enable-automation');add_argument('--disable-popup-blocking');add_argument('--remote-debugging-port=9222')" \
             -V data.yaml \
             -V country.yaml \
             -V ${ENVIRONMENT}_domain.yaml \
@@ -135,6 +161,8 @@ jobs:
       - name: 重新執行失敗的測試
         if: steps.initial_test.outcome == 'failure'
         continue-on-error: true
+        env:
+          DISPLAY: :0
         run: |
           cd swag_Automation_QA
           if [ -f "output.xml" ]; then
@@ -144,25 +172,12 @@ jobs:
               -v SELENIUM_TIMEOUT:30 \
               -v SELENIUM_IMPLICIT_WAIT:10 \
               -v CHROMEDRIVER_PATH:$(which chromedriver) \
-              -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080');add_argument('--disable-notifications');add_argument('--enable-automation')" \
+              -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080');add_argument('--disable-notifications');add_argument('--enable-automation');add_argument('--disable-popup-blocking');add_argument('--remote-debugging-port=9222')" \
               -V data.yaml \
               -V country.yaml \
               -V ${ENVIRONMENT}_domain.yaml \
               -i ${TEST_TYPE} \
               TestCase
-          fi
-
-      - name: 合併測試結果
-        if: steps.initial_test.outcome == 'failure'
-        continue-on-error: true
-        run: |
-          cd swag_Automation_QA
-          if [ -f "output.xml" ]; then
-            rebot \
-              --output merged-output.xml \
-              --merge \
-              output.xml \
-              output.xml
           fi
 
       - name: 上傳測試結果
@@ -182,3 +197,4 @@ jobs:
         run: |
           pkill -f "Google Chrome" || true
           pkill -f "chromedriver" || true
+          pkill -f "XQuartz" || true
