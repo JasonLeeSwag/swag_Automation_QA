@@ -2,7 +2,7 @@ name: SWAG 自動化測試
 
 on:
   schedule:
-    - cron: '0 9 * * 1'  # 每週一早上 9:00
+    - cron: '0 9 * * 1'
   
   pull_request:
     types: [opened, synchronize, reopened]
@@ -38,57 +38,71 @@ jobs:
     env:
       ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
       TEST_TYPE: ${{ (github.event_name == 'schedule' || github.event_name == 'pull_request') && 'bvt' || inputs.test_type }}
+      DISPLAY: :99
     
     steps:
       - name: 檢出程式碼
         uses: actions/checkout@v4
 
-      - name: 建立 Requirements 文件
+      - name: 安裝 Xvfb
         run: |
-          cat << EOF > requirements.txt
-          robotframework==7.0.1
-          robotframework-datetime-tz==1.0.6
-          robotframework-debuglibrary==2.5.0
-          robotframework-faker==5.0.0
-          robotframework-jsonlibrary==0.5
-          robotframework-jsonvalidator==2.0.0
-          robotframework-pythonlibcore==4.4.1
-          robotframework-randomlibrary==0.0.2
-          robotframework-requests==0.9.7
-          robotframework-selenium2library==3.0.0
-          robotframework-seleniumlibrary==6.3.0
-          robotframework-yamllibrary==0.2.8
-          selenium==4.23.1
-          webdriver-manager==4.0.2
-          Faker==27.0.0
-          requests==2.32.3
-          PyYAML==6.0.2
-          python-dotenv==1.0.1
-          cryptography==43.0.0
-          pyOpenSSL==24.2.1
-          EOF
+          brew install xquartz
+          brew install --cask xquartz
 
+      - name: 啟動 Xvfb
+        run: |
+          brew services start xquartz
+          sleep 3
+          
       - name: 設定 Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           
-      - name: 安裝 Chrome
+      - name: 安裝 Chrome 和相關工具
         run: |
           brew update
           brew install --cask google-chrome
           brew install --cask chromedriver
+          brew install gtk+3
+          brew install pango
+          brew install gdk-pixbuf
+          brew install atk
           
-      - name: 安裝相依套件
+      - name: 安裝 Python 套件
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install \
+            robotframework==7.0.1 \
+            robotframework-seleniumlibrary==6.3.0 \
+            robotframework-selenium2library==3.0.0 \
+            selenium==4.23.1 \
+            pyotp==2.9.0 \
+            robotframework-requests==0.9.7 \
+            robotframework-jsonlibrary==0.5 \
+            requests==2.32.3 \
+            PyYAML==6.0.2 \
+            python-dotenv==1.0.1 \
+            cryptography==43.0.0 \
+            pyOpenSSL==24.2.1 \
+            Faker==27.0.0
+
+      - name: 確認環境設定
+        run: |
+          python -c "import selenium; print('Selenium version:', selenium.__version__)"
+          python -c "import pyotp; print('PyOTP version:', pyotp.__version__)"
+          chromedriver --version
+          google-chrome --version
           
       - name: 執行自動化測試
         id: initial_test
         continue-on-error: true
         run: |
           cd swag_Automation_QA
+          
+          # 設定 Chrome 選項
+          export ROBOT_OPTIONS="--variable BROWSER:chrome --variable OPTIONS:'--start-maximized --no-sandbox --disable-dev-shm-usage'"
+          
           robot \
             -V data.yaml \
             -V country.yaml \
@@ -109,9 +123,6 @@ jobs:
               -V ${ENVIRONMENT}_domain.yaml \
               -i ${TEST_TYPE} \
               TestCase
-          else
-            echo "找不到 output.xml 檔案"
-            exit 0
           fi
 
       - name: 合併測試結果
@@ -136,4 +147,5 @@ jobs:
             swag_Automation_QA/*.xml
             swag_Automation_QA/log.html
             swag_Automation_QA/report.html
+            swag_Automation_QA/reports/
           if-no-files-found: warn
