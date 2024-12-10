@@ -38,7 +38,7 @@ jobs:
     env:
       ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
       TEST_TYPE: ${{ (github.event_name == 'schedule' || github.event_name == 'pull_request') && 'bvt' || inputs.test_type }}
-      DISPLAY: :0
+      CI: true
     
     steps:
       - name: 檢出程式碼
@@ -49,26 +49,6 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: 設定虛擬顯示器
-        run: |
-          # 安裝必要的套件
-          brew install screenresolution
-          
-          # 設定螢幕解析度
-          screenresolution set 1920x1080x32@60
-          
-          # 安裝 XQuartz (X11)
-          brew install --cask xquartz
-          
-          # 啟動 XQuartz
-          open -a XQuartz
-          
-          # 等待 XQuartz 啟動
-          sleep 5
-          
-          # 設定 DISPLAY 環境變數
-          echo "DISPLAY=:0" >> $GITHUB_ENV
-          
       - name: 安裝 Chrome 和 ChromeDriver
         run: |
           # 安裝 Chrome
@@ -105,45 +85,13 @@ jobs:
             robotframework-jsonvalidator==2.0.0 \
             robotframework-debuglibrary==2.5.0
 
-      - name: 設定 Chrome 配置
-        run: |
-          mkdir -p ~/Library/Application\ Support/Google/Chrome
-          echo '{
-            "browser": {
-              "enabled_labs_experiments": [
-                "enable-force-dark",
-                "enable-quic"
-              ]
-            },
-            "profile": {
-              "default_content_setting_values": {
-                "notifications": 1,
-                "plugins": 1,
-                "popups": 1
-              },
-              "password_manager_enabled": false,
-              "default_content_settings": {
-                "popups": 1,
-                "notifications": 1
-              }
-            }
-          }' > ~/Library/Application\ Support/Google/Chrome/First\ Run
-
       - name: 執行自動化測試
         id: initial_test
         continue-on-error: true
         env:
-          DISPLAY: :0
+          PYTHONPATH: ${{ github.workspace }}/swag_Automation_QA/robotframework/robot_lib
         run: |
           cd swag_Automation_QA
-          
-          # 複製 ChromeDriver 到專案目錄
-          mkdir -p robotframework/robot_lib/chromedriver
-          cp $(which chromedriver) robotframework/robot_lib/chromedriver/
-          chmod +x robotframework/robot_lib/chromedriver/chromedriver
-          
-          # 設定 Python 路徑
-          export PYTHONPATH=$PWD/robotframework/robot_lib:$PYTHONPATH
           
           # 執行測試
           robot \
@@ -151,34 +99,11 @@ jobs:
             -v SELENIUM_TIMEOUT:30 \
             -v SELENIUM_IMPLICIT_WAIT:10 \
             -v CHROMEDRIVER_PATH:$(which chromedriver) \
-            -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080');add_argument('--disable-notifications');add_argument('--enable-automation');add_argument('--disable-popup-blocking');add_argument('--remote-debugging-port=9222')" \
             -V data.yaml \
             -V country.yaml \
             -V ${ENVIRONMENT}_domain.yaml \
             -i ${TEST_TYPE} \
             TestCase
-
-      - name: 重新執行失敗的測試
-        if: steps.initial_test.outcome == 'failure'
-        continue-on-error: true
-        env:
-          DISPLAY: :0
-        run: |
-          cd swag_Automation_QA
-          if [ -f "output.xml" ]; then
-            robot \
-              --rerunfailed output.xml \
-              -v BROWSER:chrome \
-              -v SELENIUM_TIMEOUT:30 \
-              -v SELENIUM_IMPLICIT_WAIT:10 \
-              -v CHROMEDRIVER_PATH:$(which chromedriver) \
-              -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080');add_argument('--disable-notifications');add_argument('--enable-automation');add_argument('--disable-popup-blocking');add_argument('--remote-debugging-port=9222')" \
-              -V data.yaml \
-              -V country.yaml \
-              -V ${ENVIRONMENT}_domain.yaml \
-              -i ${TEST_TYPE} \
-              TestCase
-          fi
 
       - name: 上傳測試結果
         if: always()
@@ -191,10 +116,3 @@ jobs:
             swag_Automation_QA/report.html
             swag_Automation_QA/reports/
           if-no-files-found: warn
-
-      - name: 清理環境
-        if: always()
-        run: |
-          pkill -f "Google Chrome" || true
-          pkill -f "chromedriver" || true
-          pkill -f "XQuartz" || true
