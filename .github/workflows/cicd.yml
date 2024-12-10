@@ -57,32 +57,59 @@ jobs:
       - name: 檢出程式碼
         uses: actions/checkout@v4
 
-      # 步驟 2: 設定 Python 環境
+      # 步驟 2: 建立 requirements.txt
+      - name: 建立 Requirements 文件
+        run: |
+          cat << EOF > requirements.txt
+          robotframework==7.0.1
+          robotframework-datetime-tz==1.0.6
+          robotframework-debuglibrary==2.5.0
+          robotframework-faker==5.0.0
+          robotframework-jsonlibrary==0.5
+          robotframework-jsonvalidator==2.0.0
+          robotframework-pythonlibcore==4.4.1
+          robotframework-randomlibrary==0.0.2
+          robotframework-requests==0.9.7
+          robotframework-selenium2library==3.0.0
+          robotframework-seleniumlibrary==6.3.0
+          robotframework-yamllibrary==0.2.8
+          selenium==4.23.1
+          webdriver-manager==4.0.2
+          Faker==27.0.0
+          requests==2.32.3
+          PyYAML==6.0.2
+          python-dotenv==1.0.1
+          cryptography==43.0.0
+          pyOpenSSL==24.2.1
+          EOF
+
+      # 步驟 3: 設定 Python 環境
       - name: 設定 Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           
-      # 步驟 3: 安裝 Chrome 瀏覽器
+      # 步驟 4: 安裝 Chrome 瀏覽器
       - name: 安裝 Chrome
         run: |
           brew update
           brew install --cask google-chrome
           brew install --cask chromedriver
           
-      # 步驟 4: 安裝相依套件
+      # 步驟 5: 安裝相依套件
       - name: 安裝相依套件
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           
-      # 步驟 5: 準備測試環境
+      # 步驟 6: 準備測試環境
       - name: 準備測試環境
         run: |
           mkdir -p results
-          mkdir -p reports
+          mkdir -p rerun_results
+          mkdir -p final_results
           
-      # 步驟 6: 執行測試
+      # 步驟 7: 執行測試
       - name: 執行自動化測試
         id: initial_test
         continue-on-error: true
@@ -95,7 +122,7 @@ jobs:
             --outputdir results \
             TestCase
 
-      # 步驟 7: 重新執行失敗的測試
+      # 步驟 8: 重新執行失敗的測試
       - name: 重新執行失敗的測試
         if: steps.initial_test.outcome == 'failure'
         continue-on-error: true
@@ -109,7 +136,7 @@ jobs:
             --outputdir rerun_results \
             TestCase
 
-      # 步驟 8: 合併測試結果
+      # 步驟 9: 合併測試結果
       - name: 合併測試結果
         if: steps.initial_test.outcome == 'failure'
         run: |
@@ -119,7 +146,7 @@ jobs:
             results/output.xml \
             rerun_results/output.xml
 
-      # 步驟 9: 上傳測試結果
+      # 步驟 10: 上傳測試結果
       - name: 上傳測試結果
         if: always()
         uses: actions/upload-artifact@v4
