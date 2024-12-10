@@ -49,8 +49,8 @@ jobs:
     env:
       # 根據觸發方式決定環境
       ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
-      # 設定測試類型：如果是排程或 PR 觸發則執行 bvt，否則使用手動選擇的類型
-      TEST_TYPE: ${{ github.event_name == 'schedule' || github.event_name == 'pull_request' ? 'bvt' : inputs.test_type }}
+      # 設定測試類型：schedule 和 PR 時執行 bvt，其他情況使用手動選擇的類型
+      TEST_TYPE: ${{ (github.event_name == 'schedule' || github.event_name == 'pull_request') && 'bvt' || inputs.test_type }}
     
     steps:
       # 步驟 1: 檢出程式碼
