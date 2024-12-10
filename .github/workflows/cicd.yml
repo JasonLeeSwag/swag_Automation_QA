@@ -38,22 +38,12 @@ jobs:
     env:
       ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
       TEST_TYPE: ${{ (github.event_name == 'schedule' || github.event_name == 'pull_request') && 'bvt' || inputs.test_type }}
-      DISPLAY: :99
+      PYTHONPATH: ${GITHUB_WORKSPACE}/swag_Automation_QA/robotframework/robot_lib
     
     steps:
       - name: 檢出程式碼
         uses: actions/checkout@v4
 
-      - name: 安裝 Xvfb
-        run: |
-          brew install xquartz
-          brew install --cask xquartz
-
-      - name: 啟動 Xvfb
-        run: |
-          brew services start xquartz
-          sleep 3
-          
       - name: 設定 Python
         uses: actions/setup-python@v5
         with:
@@ -61,13 +51,17 @@ jobs:
           
       - name: 安裝 Chrome 和相關工具
         run: |
-          brew update
-          brew install --cask google-chrome
+          # 安裝 Chrome
+          brew install --cask google-chrome-for-testing
+          
+          # 安裝 ChromeDriver
           brew install --cask chromedriver
-          brew install gtk+3
-          brew install pango
-          brew install gdk-pixbuf
-          brew install atk
+          
+          # 啟動 ChromeDriver
+          chromedriver --version
+          
+          # 確認 Chrome 安裝
+          /Applications/Google\ Chrome\ for\ Testing.app/Contents/MacOS/Google\ Chrome\ for\ Testing --version
           
       - name: 安裝 Python 套件
         run: |
@@ -89,20 +83,24 @@ jobs:
 
       - name: 確認環境設定
         run: |
+          echo "Python PATH: $PYTHONPATH"
           python -c "import selenium; print('Selenium version:', selenium.__version__)"
           python -c "import pyotp; print('PyOTP version:', pyotp.__version__)"
           chromedriver --version
-          google-chrome --version
+          /Applications/Google\ Chrome\ for\ Testing.app/Contents/MacOS/Google\ Chrome\ for\ Testing --version
           
       - name: 執行自動化測試
         id: initial_test
         continue-on-error: true
+        env:
+          ROBOT_OPTIONS: "--variable BROWSER:chrome --variable OPTIONS:--no-sandbox --disable-gpu --window-size=1920,1080"
         run: |
           cd swag_Automation_QA
           
           # 設定 Chrome 選項
-          export ROBOT_OPTIONS="--variable BROWSER:chrome --variable OPTIONS:'--start-maximized --no-sandbox --disable-dev-shm-usage'"
+          export PYTHONPATH=$PYTHONPATH:${GITHUB_WORKSPACE}/swag_Automation_QA/robotframework/robot_lib
           
+          # 執行測試
           robot \
             -V data.yaml \
             -V country.yaml \
