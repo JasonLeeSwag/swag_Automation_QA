@@ -8,3 +8,5 @@
 init.py
 test_tool.robot
 TestData/job_old\.json
+actions-runner
+swag_Automation_QA/actions-runner/

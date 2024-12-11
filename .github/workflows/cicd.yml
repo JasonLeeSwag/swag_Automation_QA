@@ -3,12 +3,12 @@ name: SWAG 自動化測試
 on:
   schedule:
     - cron: '0 9 * * 1'
-  
+
   pull_request:
     types: [opened, synchronize, reopened]
     labels:
       - e2e
-  
+
   workflow_dispatch:
     inputs:
       environment:
@@ -34,72 +34,32 @@ on:
 jobs:
   test:
     runs-on: [self-hosted, macos]
-    
+
     env:
       ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
       TEST_TYPE: ${{ (github.event_name == 'schedule' || github.event_name == 'pull_request') && 'bvt' || inputs.test_type }}
       PYTHONPATH: ${{ github.workspace }}/swag_Automation_QA/robotframework/robot_lib
       OBJC_DISABLE_INITIALIZE_FORK_SAFETY: YES
-    
+
     steps:
       - name: 清理工作區
         run: |
-          rm -rf *
-          rm -rf .git*
+          rm -rf swag_Automation_QA/results/
+          rm -rf swag_Automation_QA/reports/
           
       - name: 檢出程式碼
         uses: actions/checkout@v4
-
-      - name: 設定 Python 環境
-        run: |
-          # 使用 Rosetta 2 創建 x86_64 Python 環境
-          arch -x86_64 python3 -m venv venv
-          source venv/bin/activate
-          python3 -m pip install --upgrade pip
-
-      - name: 安裝依賴套件
-        run: |
-          source venv/bin/activate
-          # 使用 Rosetta 2 安裝套件
-          arch -x86_64 pip install \
-            robotframework==7.0.1 \
-            robotframework-seleniumlibrary==6.3.0 \
-            robotframework-selenium2library==3.0.0 \
-            selenium==4.23.1 \
-            pyotp==2.9.0 \
-            robotframework-requests==0.9.7 \
-            robotframework-jsonlibrary==0.5 \
-            requests==2.32.3 \
-            PyYAML==6.0.2 \
-            python-dotenv==1.0.1 \
-            cryptography==43.0.0 \
-            pyOpenSSL==24.2.1 \
-            Faker==27.0.0 \
-            webdriver-manager==4.0.2 \
-            robotframework-jsonvalidator==2.0.0 \
-            robotframework-debuglibrary==2.5.0 \
-            charset-normalizer
 
       - name: 執行測試
         id: test
         continue-on-error: true
         run: |
-          source venv/bin/activate
           cd swag_Automation_QA
-          
-          # 設定環境變數
-          export PYTHONPATH=$PWD/robotframework/robot_lib:$PYTHONPATH
-          export DISPLAY=:0
-          
-          # 確保目錄存在
           mkdir -p results
-          
-          # 執行測試
           robot \
             -v BROWSER:chrome \
             -v SELENIUM_TIMEOUT:60 \
             -v SELENIUM_IMPLICIT_WAIT:30 \
-            -v BROWSER_OPTIONS:"add_argument('--no-sandbox');add_argument('--start-maximized');add_argument('--disable-dev-shm-usage');add_argument('--disable-gpu');add_argument('--window-size=1920,1080');add_argument('--disable-notifications');add_argument('--disable-popup-blocking');add_argument('--remote-debugging-port=9222');add_argument('--disable-features=TranslateUI')" \
             -V data.yaml \
             -V country.yaml \
             -V ${ENVIRONMENT}_domain.yaml \
@@ -116,11 +76,62 @@ jobs:
             swag_Automation_QA/results/
             swag_Automation_QA/reports/
           if-no-files-found: warn
-          
-      - name: 清理環境
-        if: always()
+
+      - name: 分析測試結果並生成視覺化圖表
+        id: analyze_results
         run: |
-          pkill -f "Google Chrome" || true
-          pkill -f "chromedriver" || true
-          rm -rf venv
-          rm -rf ~/Library/Application\ Support/Google/Chrome/Default/*
+          python3 <<EOF
+          import json
+          import matplotlib.pyplot as plt
+          import os
+
+          # 讀取測試結果
+          result_file = 'swag_Automation_QA/results/output.xml'
+          pass_count = 0
+          fail_count = 0
+
+          if os.path.exists(result_file):
+              with open(result_file, 'r') as file:
+                  content = file.read()
+                  pass_count = content.count('pass="1"')
+                  fail_count = content.count('fail="1"')
+
+          # 生成圓餅圖
+          labels = ['Passed', 'Failed']
+          sizes = [pass_count, fail_count]
+          colors = ['#4CAF50', '#FF5722']
+
+          plt.figure(figsize=(6, 6))
+          plt.pie(sizes, labels=labels, autopct='%1.1f%%', colors=colors, startangle=140)
+          plt.title('Test Results Overview')
+          plt.savefig('test_results_pie_chart.png')
+          EOF
+
+      - name: 提交自動生成的 PR
+        uses: peter-evans/create-pull-request@v5
+        with:
+          title: |
+            ${{ format('
+              {0}-{1}-QA Full-Test',
+              env.GITHUB_WORKFLOW,
+              github.event_name == 'workflow_dispatch' && '手動觸發' || 
+              github.event_name == 'pull_request' && 'e2e自動觸發' || 
+              '定時自動觸發'
+            ) }}
+          body: |
+            ### 測試執行時間: `${{ github.run_started_at }}`
+            
+            **環境**: `${{ env.ENVIRONMENT }}`
+            **測試類型**: `${{ env.TEST_TYPE }}`
+
+            ### 測試結果摘要
+            - 通過測試: `${{ steps.analyze_results.outputs.pass_count }}`
+            - 失敗測試: `${{ steps.analyze_results.outputs.fail_count }}`
+
+            ![測試結果](test_results_pie_chart.png)
+
+            ### 測試報告
+            [下載完整測試報告](./swag_Automation_QA/results/log.html)
+
+          commit-message: "自動化測試結果分析"
+          branch: "auto-test-results-${{ github.run_number }}"
