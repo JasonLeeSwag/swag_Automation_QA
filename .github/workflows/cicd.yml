@@ -31,10 +31,10 @@ on:
           - video
           - myprofile
       custom_domain:
-        description: '自定義測試網域 (例如: v3-211.app.swag.live)'
+        description: '自定義網域 (可輸入完整URL或版本號，例如: https://v3-210.app.swag.live/?lang=zh-TW 或 v3-210.app.swag.live 或 v3-210 或 v3-210.1)'
         required: false
         type: string
-        default: 'swag.live'
+        default: ''
 
 jobs:
   test:
@@ -55,7 +55,6 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 更新網域設定
-        if: inputs.custom_domain != ''
         run: |
           cd swag_Automation_QA
           # 備份原始檔案
@@ -64,14 +63,36 @@ jobs:
           # 使用 Python 更新 YAML 檔案
           python3 <<EOF
           import yaml
+          import re
+          
+          def process_domain_input(input_str):
+              # 如果沒有輸入，使用預設值
+              if not input_str:
+                  return 'https://swag.live/?lang=zh-TW'
+                  
+              # 如果是完整的 URL，直接返回
+              if input_str.startswith('http'):
+                  return input_str
+                  
+              # 如果只有版本號（如 v3-210 或 v3-210.1）
+              if input_str.startswith('v3-'):
+                  return f'https://{input_str}.app.swag.live/?lang=zh-TW'
+                  
+              # 如果是完整域名但沒有協議和參數
+              if '.app.swag.live' in input_str:
+                  return f'https://{input_str}/?lang=zh-TW'
+                  
+              # 如果不符合上述任何情況，假設是版本號
+              return f'https://{input_str}.app.swag.live/?lang=zh-TW'
           
           # 讀取原始設定
           with open('${ENVIRONMENT}_domain.yaml', 'r', encoding='utf-8') as file:
               config = yaml.safe_load(file)
           
-          # 更新網域
-          custom_domain = '${{ inputs.custom_domain }}'
-          config['SWAG_BASE_URL'] = f'https://{custom_domain}/?lang=zh-TW'
+          # 處理輸入並更新 URL
+          input_domain = '${{ inputs.custom_domain }}'
+          processed_url = process_domain_input(input_domain)
+          config['SWAG_BASE_URL'] = processed_url
           
           # 寫回檔案
           with open('${ENVIRONMENT}_domain.yaml', 'w', encoding='utf-8') as file:
