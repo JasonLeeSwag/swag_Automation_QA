@@ -35,12 +35,10 @@ on:
         default: ''
 
 jobs:
-  determine_test_type:
-    runs-on: [self-hosted, macos]
+  # PR 觸發的測試
+  pr_test:
     if: github.event_name == 'pull_request'
-    outputs:
-      test_type: ${{ steps.set_test.outputs.test_type }}
-      should_run: ${{ steps.check_run.outputs.should_run }}
+    runs-on: [self-hosted, macos]
     
     steps:
       - name: 檢查標籤和決定測試類型
@@ -51,55 +49,67 @@ jobs:
           
           if [[ $LABELS == *"fulltest"* ]]; then
             echo "should_run=true" >> $GITHUB_OUTPUT
+            echo "test_type=fulltest" >> $GITHUB_OUTPUT
             echo "找到 fulltest 標籤，將執行完整測試"
           elif [[ $LABELS == *"e2e"* ]]; then
+            PR_TITLE="${{ github.event.pull_request.title }}"
+            PR_TITLE_LOWER=$(echo "$PR_TITLE" | tr '[:upper:]' '[:lower:]')
+            
+            TEST_TYPE="bvt"
+            if [[ $PR_TITLE_LOWER =~ login|sign.?in ]]; then
+              TEST_TYPE="login"
+            elif [[ $PR_TITLE_LOWER =~ register|sign.?up ]]; then
+              TEST_TYPE="register"
+            elif [[ $PR_TITLE_LOWER =~ video|stream|rtc ]]; then
+              TEST_TYPE="video"
+            elif [[ $PR_TITLE_LOWER =~ profile|account ]]; then
+              TEST_TYPE="myprofile"
+            fi
+            
             echo "should_run=true" >> $GITHUB_OUTPUT
-            echo "找到 e2e 標籤，將根據 PR 標題決定測試範圍"
+            echo "test_type=$TEST_TYPE" >> $GITHUB_OUTPUT
+            echo "找到 e2e 標籤，將執行 $TEST_TYPE 測試"
           else
             echo "should_run=false" >> $GITHUB_OUTPUT
             echo "未找到相關標籤，不執行測試"
           fi
 
-      - name: 分析 PR 標題和設置測試類型
-        id: set_test
-        if: contains(github.event.pull_request.labels.*.name, 'e2e')
-        run: |
-          PR_TITLE="${{ github.event.pull_request.title }}"
-          PR_TITLE_LOWER=$(echo "$PR_TITLE" | tr '[:upper:]' '[:lower:]')
-          echo "PR 標題: $PR_TITLE"
-          
-          declare -A TEST_KEYWORDS
-          TEST_KEYWORDS["login"]="login|sign.?in"
-          TEST_KEYWORDS["register"]="register|sign.?up"
-          TEST_KEYWORDS["video"]="video|stream|rtc"
-          TEST_KEYWORDS["myprofile"]="profile|account"
-          
-          TEST_TYPE="bvt"
-          
-          for test in "${!TEST_KEYWORDS[@]}"; do
-            if echo "$PR_TITLE_LOWER" | grep -E "${TEST_KEYWORDS[$test]}" > /dev/null; then
-              TEST_TYPE="$test"
-              echo "匹配到測試類型: $test"
-              break
-            fi
-          done
-          
-          echo "test_type=$TEST_TYPE" >> $GITHUB_OUTPUT
-          echo "將執行的測試類型: $TEST_TYPE"
+      - name: 執行測試
+        if: steps.check_run.outputs.should_run == 'true'
+        uses: ./.github/actions/run-test
+        with:
+          environment: 'qat'
+          test_type: ${{ steps.check_run.outputs.test_type }}
 
-  test:
-    needs: determine_test_type
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' && needs.determine_test_type.outputs.should_run == 'true') ||
-      github.event_name == 'schedule'
+  # 手動或排程觸發的測試
+  manual_scheduled_test:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: [self-hosted, macos]
+    
+    steps:
+      - name: 設置環境變數
+        id: setup
+        run: |
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            echo "environment=uat" >> $GITHUB_OUTPUT
+            echo "test_type=bvt" >> $GITHUB_OUTPUT
+          else
+            echo "environment=${{ inputs.environment }}" >> $GITHUB_OUTPUT
+            echo "test_type=${{ inputs.test_type }}" >> $GITHUB_OUTPUT
+          fi
 
-    env:
-      ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
-      TEST_TYPE: ${{ github.event_name == 'pull_request' && needs.determine_test_type.outputs.test_type || inputs.test_type }}
-      PYTHONPATH: ${{ github.workspace }}/swag_Automation_QA/robotframework/robot_lib
+      - name: 執行測試
+        uses: ./.github/actions/run-test
+        with:
+          environment: ${{ steps.setup.outputs.environment }}
+          test_type: ${{ steps.setup.outputs.test_type }}
+          custom_domain: ${{ inputs.custom_domain }}
 
+# 共用的測試執行動作
+jobs:
+  run-test:
+    name: 執行測試
+    runs-on: [self-hosted, macos]
     steps:
       - name: 清理工作區
         run: |
@@ -110,9 +120,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 更新網域設定
+        if: inputs.custom_domain != ''
         run: |
           cd swag_Automation_QA
-          cp ${ENVIRONMENT}_domain.yaml ${ENVIRONMENT}_domain.yaml.bak
+          cp ${inputs.environment}_domain.yaml ${inputs.environment}_domain.yaml.bak
           
           python3 <<EOF
           import yaml
@@ -133,14 +144,14 @@ jobs:
                   
               return f'https://{input_str}.app.swag.live/?lang=zh-TW'
           
-          with open('${ENVIRONMENT}_domain.yaml', 'r', encoding='utf-8') as file:
+          with open('${inputs.environment}_domain.yaml', 'r', encoding='utf-8') as file:
               config = yaml.safe_load(file)
           
           input_domain = '${{ inputs.custom_domain }}'
           processed_url = process_domain_input(input_domain)
           config['SWAG_BASE_URL'] = processed_url
           
-          with open('${ENVIRONMENT}_domain.yaml', 'w', encoding='utf-8') as file:
+          with open('${inputs.environment}_domain.yaml', 'w', encoding='utf-8') as file:
               yaml.dump(config, file, allow_unicode=True, default_flow_style=False)
               
           print("更新後的網域設定：")
@@ -152,14 +163,14 @@ jobs:
         continue-on-error: true
         run: |
           cd swag_Automation_QA
-          if [[ "${{ contains(github.event.pull_request.labels.*.name, 'fulltest') }}" == "true" ]]; then
+          if [[ "${inputs.test_type}" == "fulltest" ]]; then
             arch -arm64 robot \
               -v BROWSER:chrome \
               -v SELENIUM_TIMEOUT:60 \
               -v SELENIUM_IMPLICIT_WAIT:30 \
               -V data.yaml \
               -V country.yaml \
-              -V ${ENVIRONMENT}_domain.yaml \
+              -V ${inputs.environment}_domain.yaml \
               TestCase
           else
             arch -arm64 robot \
@@ -168,8 +179,8 @@ jobs:
               -v SELENIUM_IMPLICIT_WAIT:30 \
               -V data.yaml \
               -V country.yaml \
-              -V ${ENVIRONMENT}_domain.yaml \
-              -i ${TEST_TYPE} \
+              -V ${inputs.environment}_domain.yaml \
+              -i ${inputs.test_type} \
               TestCase
           fi
 
@@ -227,7 +238,7 @@ jobs:
       - name: 上傳測試結果
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.TEST_STATUS }}-test-results-${{ env.TEST_TYPE }}_${{ env.CURRENT_TIME }}
+          name: ${{ env.TEST_STATUS }}-test-results-${{ inputs.test_type }}_${{ env.CURRENT_TIME }}
           path: |
             swag_Automation_QA/*.xml
             swag_Automation_QA/*.html
