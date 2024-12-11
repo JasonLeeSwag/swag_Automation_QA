@@ -66,39 +66,6 @@ jobs:
             --outputdir results \
             TestCase
 
-      # - name: 分析測試結果並生成視覺化圖表
-      #   id: analyze_results
-      #   run: |
-      #     python3 <<EOF
-      #     import xml.etree.ElementTree as ET
-      #     import matplotlib.pyplot as plt
-      #     import os
-
-      #     # 讀取測試結果
-      #     result_file = 'swag_Automation_QA/results/output.xml'
-      #     pass_count = fail_count = 0
-
-      #     if os.path.exists(result_file):
-      #         tree = ET.parse(result_file)
-      #         root = tree.getroot()
-      #         for suite in root.iter('suite'):
-      #             for test in suite.iter('test'):
-      #                 if test.attrib.get('status') == 'PASS':
-      #                     pass_count += 1
-      #                 elif test.attrib.get('status') == 'FAIL':
-      #                     fail_count += 1
-
-      #     # 生成圓餅圖
-      #     labels = ['Passed', 'Failed']
-      #     sizes = [pass_count, fail_count]
-      #     colors = ['#4CAF50', '#FF5722']
-
-      #     plt.figure(figsize=(6, 6))
-      #     plt.pie(sizes, labels=labels, autopct='%1.1f%%', colors=colors, startangle=140)
-      #     plt.title('Test Results Overview')
-      #     plt.savefig('swag_Automation_QA/results/test_results_pie_chart.png')
-      #     EOF
-
       - name: 上傳測試結果
         uses: actions/upload-artifact@v4
         with:
@@ -107,9 +74,17 @@ jobs:
             swag_Automation_QA/results/
           if-no-files-found: warn
 
+      - name: 配置 GITHUB_TOKEN 權限
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
       - name: 提交自動生成的 PR
         uses: peter-evans/create-pull-request@v5
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           title: |
             ${{ github.event_name == 'workflow_dispatch' && '手動觸發' || 
                 github.event_name == 'pull_request' && 'e2e自動觸發' || 
