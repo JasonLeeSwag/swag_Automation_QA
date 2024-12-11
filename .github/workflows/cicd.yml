@@ -125,23 +125,37 @@ jobs:
               if os.path.exists(result_file):
                   tree = ET.parse(result_file)
                   root = tree.getroot()
-                  for suite in root.findall('.//suite'):
-                      for test in suite.findall('.//test'):
-                          status_elem = test.find('status')
-                          if status_elem is not None:
-                              status = status_elem.get('status', '').upper()
-                              if status == 'PASS':
-                                  pass_count += 1
-                              elif status == 'FAIL':
-                                  fail_count += 1
+                  
+                  # 只計算實際執行的測試案例
+                  test_cases = root.findall('.//test')
+                  
+                  print("\n測試案例詳細資訊:")
+                  for test in test_cases:
+                      test_name = test.get('name', 'Unknown Test')
+                      status_elem = test.find('status')
+                      if status_elem is not None:
+                          status = status_elem.get('status', '').upper()
+                          print(f"測試案例: {test_name}, 狀態: {status}")
+                          
+                          if status == 'PASS':
+                              pass_count += 1
+                          elif status == 'FAIL':
+                              fail_count += 1
 
-                  print(f"測試完成！\n通過測試數: {pass_count}\n失敗測試數: {fail_count}")
+                  print(f"\n測試摘要:")
+                  print(f"測試案例總數: {len(test_cases)}")
+                  print(f"通過測試數: {pass_count}")
+                  print(f"失敗測試數: {fail_count}")
                   
                   with open(os.environ['GITHUB_ENV'], 'a') as env_file:
                       status_icon = '✅PASS' if fail_count == 0 else '❌FAIL'
                       current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
+                      total_tests = len(test_cases)
                       env_file.write(f'TEST_STATUS={status_icon}\n')
                       env_file.write(f'CURRENT_TIME={current_time}\n')
+                      env_file.write(f'TOTAL_TESTS={total_tests}\n')
+                      env_file.write(f'PASS_COUNT={pass_count}\n')
+                      env_file.write(f'FAIL_COUNT={fail_count}\n')
                   
                   if fail_count > 0:
                       exit(1)
@@ -150,6 +164,7 @@ jobs:
                   exit(1)
           except Exception as e:
               print(f"分析測試結果時發生錯誤：{str(e)}")
+              print(f"錯誤詳情: {str(e.__class__.__name__)}: {str(e)}")
               exit(1)
           EOF
 
@@ -157,7 +172,7 @@ jobs:
         if: env.should_run == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.TEST_STATUS }}-test-results-${{ env.test_type }}_${{ env.CURRENT_TIME }}
+          name: ${{ env.TEST_STATUS }}-test-results-${{ env.test_type }}_Total${{ env.TOTAL_TESTS }}_${{ env.CURRENT_TIME }}
           path: |
             swag_Automation_QA/*.xml
             swag_Automation_QA/*.html
@@ -249,23 +264,37 @@ jobs:
               if os.path.exists(result_file):
                   tree = ET.parse(result_file)
                   root = tree.getroot()
-                  for suite in root.findall('.//suite'):
-                      for test in suite.findall('.//test'):
-                          status_elem = test.find('status')
-                          if status_elem is not None:
-                              status = status_elem.get('status', '').upper()
-                              if status == 'PASS':
-                                  pass_count += 1
-                              elif status == 'FAIL':
-                                  fail_count += 1
+                  
+                  # 只計算實際執行的測試案例
+                  test_cases = root.findall('.//test')
+                  
+                  print("\n測試案例詳細資訊:")
+                  for test in test_cases:
+                      test_name = test.get('name', 'Unknown Test')
+                      status_elem = test.find('status')
+                      if status_elem is not None:
+                          status = status_elem.get('status', '').upper()
+                          print(f"測試案例: {test_name}, 狀態: {status}")
+                          
+                          if status == 'PASS':
+                              pass_count += 1
+                          elif status == 'FAIL':
+                              fail_count += 1
 
-                  print(f"測試完成！\n通過測試數: {pass_count}\n失敗測試數: {fail_count}")
+                  print(f"\n測試摘要:")
+                  print(f"測試案例總數: {len(test_cases)}")
+                  print(f"通過測試數: {pass_count}")
+                  print(f"失敗測試數: {fail_count}")
                   
                   with open(os.environ['GITHUB_ENV'], 'a') as env_file:
                       status_icon = '✅PASS' if fail_count == 0 else '❌FAIL'
                       current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
+                      total_tests = len(test_cases)
                       env_file.write(f'TEST_STATUS={status_icon}\n')
                       env_file.write(f'CURRENT_TIME={current_time}\n')
+                      env_file.write(f'TOTAL_TESTS={total_tests}\n')
+                      env_file.write(f'PASS_COUNT={pass_count}\n')
+                      env_file.write(f'FAIL_COUNT={fail_count}\n')
                   
                   if fail_count > 0:
                       exit(1)
@@ -274,13 +303,14 @@ jobs:
                   exit(1)
           except Exception as e:
               print(f"分析測試結果時發生錯誤：{str(e)}")
+              print(f"錯誤詳情: {str(e.__class__.__name__)}: {str(e)}")
               exit(1)
           EOF
 
       - name: 上傳測試結果
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.TEST_STATUS }}-test-results-${{ env.TEST_TYPE }}_${{ env.CURRENT_TIME }}
+          name: ${{ env.TEST_STATUS }}-test-results-${{ env.TEST_TYPE }}_Total${{ env.TOTAL_TESTS }}_${{ env.CURRENT_TIME }}
           path: |
             swag_Automation_QA/*.xml
             swag_Automation_QA/*.html
