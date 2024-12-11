@@ -4,6 +4,7 @@
 *.log
 *.bat
 *.out
+*.png
 .DS_Store
 init.py
 test_tool.robot
