@@ -7,42 +7,64 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     labels:
+      - fulltest
       - e2e
 
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: '選擇測試環境'
-        required: true
-        default: 'qat'
-        type: choice
-        options:
-          - qat
-          - uat
-      test_type:
-        description: '選擇測試類型'
-        required: true
-        default: 'bvt'
-        type: choice
-        options:
-          - bvt
-          - login
-          - register
-          - video
-          - myprofile
-      custom_domain:
-        description: '自定義網域 (可輸入完整URL或版本號，例如: https://v3-210.app.swag.live/?lang=zh-TW 或 v3-210.app.swag.live 或 v3-210 或 v3-210.1)'
-        required: false
-        type: string
-        default: ''
-
 jobs:
+  determine_test_type:
+    runs-on: [self-hosted, macos]
+    outputs:
+      test_type: ${{ steps.set_test.outputs.test_type }}
+      
+    steps:
+      - name: 設定測試類型
+        id: set_test
+        run: |
+          # 檢查 PR 標籤
+          LABELS="${{ join(github.event.pull_request.labels.*.name, ' ') }}"
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          
+          # 轉換 PR 標題為小寫以便比對
+          TITLE_LOWER=$(echo "$PR_TITLE" | tr '[:upper:]' '[:lower:]')
+          
+          if [[ $LABELS == *"fulltest"* ]]; then
+            echo "檢測到 fulltest 標籤，執行完整測試"
+            echo "test_type=bvt" >> $GITHUB_OUTPUT
+          elif [[ $LABELS == *"e2e"* ]]; then
+            # 定義可能的測試類型和它們的關鍵字
+            declare -A test_patterns=(
+              ["login"]="login|登入"
+              ["register"]="register|註冊|注册|signup"
+              ["video"]="video|視頻|视频|直播"
+              ["myprofile"]="profile|個人資料|个人资料"
+            )
+            
+            # 預設測試類型
+            TEST_TYPE="bvt"
+            
+            # 遍歷所有測試類型尋找匹配
+            for test in "${!test_patterns[@]}"; do
+              pattern="${test_patterns[$test]}"
+              if echo "$TITLE_LOWER" | grep -qE "$pattern"; then
+                TEST_TYPE="$test"
+                break
+              fi
+            done
+            
+            echo "根據 PR 標題 '$PR_TITLE' 選擇測試類型: $TEST_TYPE"
+            echo "test_type=$TEST_TYPE" >> $GITHUB_OUTPUT
+          else
+            echo "無特殊標籤，使用預設測試類型"
+            echo "test_type=bvt" >> $GITHUB_OUTPUT
+          fi
+
   test:
+    needs: determine_test_type
     runs-on: [self-hosted, macos]
 
     env:
-      ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
-      TEST_TYPE: ${{ (github.event_name == 'schedule' || github.event_name == 'pull_request') && 'bvt' || inputs.test_type }}
+      ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || 'qat' }}
+      TEST_TYPE: ${{ needs.determine_test_type.outputs.test_type }}
       PYTHONPATH: ${{ github.workspace }}/swag_Automation_QA/robotframework/robot_lib
 
     steps:
@@ -55,6 +77,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 更新網域設定
+        if: inputs.custom_domain != ''
         run: |
           cd swag_Automation_QA
           # 備份原始檔案
