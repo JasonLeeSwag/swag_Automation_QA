@@ -66,6 +66,40 @@ jobs:
             --outputdir results \
             TestCase
 
+      - name: 分析測試結果
+        id: analyze_results
+        run: |
+          python3 <<EOF
+          import os
+          from xml.etree import ElementTree as ET
+
+          result_file = 'swag_Automation_QA/results/output.xml'
+          pass_count = fail_count = 0
+
+          if os.path.exists(result_file):
+              tree = ET.parse(result_file)
+              root = tree.getroot()
+              for suite in root.iter('suite'):
+                  for test in suite.iter('test'):
+                      if test.attrib['status'] == 'PASS':
+                          pass_count += 1
+                      elif test.attrib['status'] == 'FAIL':
+                          fail_count += 1
+
+          print(f"測試完成！\n通過測試數: {pass_count}\n失敗測試數: {fail_count}")
+
+          if fail_count > 0:
+              exit(1)
+          EOF
+
+      - name: 打印測試結果
+        if: success()
+        run: echo "所有測試均通過！"
+
+      - name: 打印失敗結果
+        if: failure()
+        run: echo "部分測試失敗，請檢查測試結果！"
+
       - name: 上傳測試結果
         uses: actions/upload-artifact@v4
         with:
@@ -73,36 +107,3 @@ jobs:
           path: |
             swag_Automation_QA/results/
           if-no-files-found: warn
-
-      - name: 配置 GITHUB_TOKEN 權限
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-
-      - name: 提交自動生成的 PR
-        uses: peter-evans/create-pull-request@v5
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          title: |
-            ${{ github.event_name == 'workflow_dispatch' && '手動觸發' || 
-                github.event_name == 'pull_request' && 'e2e自動觸發' || 
-                '定時自動觸發' }}-QA Full-Test
-          body: |
-            ### 測試執行時間: `${{ github.run_started_at }}`
-            
-            **環境**: `${{ env.ENVIRONMENT }}`
-            **測試類型**: `${{ env.TEST_TYPE }}`
-
-            ### 測試結果摘要
-            - 通過測試: `${{ steps.analyze_results.outputs.pass_count }}`
-            - 失敗測試: `${{ steps.analyze_results.outputs.fail_count }}`
-
-            ![測試結果](swag_Automation_QA/results/test_results_pie_chart.png)
-
-            ### 測試報告
-            [下載完整測試報告](swag_Automation_QA/results/log.html)
-
-          commit-message: "自動化測試結果分析"
-          branch: "auto-test-results-${{ github.run_number }}"
