@@ -39,8 +39,10 @@ jobs:
   pr_test:
     if: github.event_name == 'pull_request'
     runs-on: [self-hosted, macos]
-    
     steps:
+      - name: 檢出程式碼
+        uses: actions/checkout@v4
+
       - name: 檢查標籤和決定測試類型
         id: check_run
         run: |
@@ -48,8 +50,8 @@ jobs:
           echo "Labels: $LABELS"
           
           if [[ $LABELS == *"fulltest"* ]]; then
-            echo "should_run=true" >> $GITHUB_OUTPUT
-            echo "test_type=fulltest" >> $GITHUB_OUTPUT
+            echo "should_run=true" >> $GITHUB_ENV
+            echo "test_type=fulltest" >> $GITHUB_ENV
             echo "找到 fulltest 標籤，將執行完整測試"
           elif [[ $LABELS == *"e2e"* ]]; then
             PR_TITLE="${{ github.event.pull_request.title }}"
@@ -66,68 +68,127 @@ jobs:
               TEST_TYPE="myprofile"
             fi
             
-            echo "should_run=true" >> $GITHUB_OUTPUT
-            echo "test_type=$TEST_TYPE" >> $GITHUB_OUTPUT
+            echo "should_run=true" >> $GITHUB_ENV
+            echo "test_type=$TEST_TYPE" >> $GITHUB_ENV
             echo "找到 e2e 標籤，將執行 $TEST_TYPE 測試"
           else
-            echo "should_run=false" >> $GITHUB_OUTPUT
+            echo "should_run=false" >> $GITHUB_ENV
             echo "未找到相關標籤，不執行測試"
+            exit 0
           fi
 
+      - name: 清理工作區
+        if: env.should_run == 'true'
+        run: |
+          rm -rf swag_Automation_QA/*.xml
+          rm -rf swag_Automation_QA/*.html
+
       - name: 執行測試
-        if: steps.check_run.outputs.should_run == 'true'
-        uses: ./.github/actions/run-test
+        if: env.should_run == 'true'
+        id: test
+        continue-on-error: true
+        run: |
+          cd swag_Automation_QA
+          if [[ "${{ env.test_type }}" == "fulltest" ]]; then
+            arch -arm64 robot \
+              -v BROWSER:chrome \
+              -v SELENIUM_TIMEOUT:60 \
+              -v SELENIUM_IMPLICIT_WAIT:30 \
+              -V data.yaml \
+              -V country.yaml \
+              -V qat_domain.yaml \
+              TestCase
+          else
+            arch -arm64 robot \
+              -v BROWSER:chrome \
+              -v SELENIUM_TIMEOUT:60 \
+              -v SELENIUM_IMPLICIT_WAIT:30 \
+              -V data.yaml \
+              -V country.yaml \
+              -V qat_domain.yaml \
+              -i ${{ env.test_type }} \
+              TestCase
+          fi
+
+      - name: 分析測試結果
+        if: env.should_run == 'true'
+        run: |
+          python3 <<EOF
+          import os
+          from xml.etree import ElementTree as ET
+          from datetime import datetime
+
+          result_file = 'swag_Automation_QA/output.xml'
+          pass_count = fail_count = 0
+
+          try:
+              if os.path.exists(result_file):
+                  tree = ET.parse(result_file)
+                  root = tree.getroot()
+                  for suite in root.findall('.//suite'):
+                      for test in suite.findall('.//test'):
+                          status_elem = test.find('status')
+                          if status_elem is not None:
+                              status = status_elem.get('status', '').upper()
+                              if status == 'PASS':
+                                  pass_count += 1
+                              elif status == 'FAIL':
+                                  fail_count += 1
+
+                  print(f"測試完成！\n通過測試數: {pass_count}\n失敗測試數: {fail_count}")
+                  
+                  with open(os.environ['GITHUB_ENV'], 'a') as env_file:
+                      status_icon = '✅PASS' if fail_count == 0 else '❌FAIL'
+                      current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
+                      env_file.write(f'TEST_STATUS={status_icon}\n')
+                      env_file.write(f'CURRENT_TIME={current_time}\n')
+                  
+                  if fail_count > 0:
+                      exit(1)
+              else:
+                  print(f"找不到測試結果檔案：{result_file}")
+                  exit(1)
+          except Exception as e:
+              print(f"分析測試結果時發生錯誤：{str(e)}")
+              exit(1)
+          EOF
+
+      - name: 上傳測試結果
+        if: env.should_run == 'true'
+        uses: actions/upload-artifact@v4
         with:
-          environment: 'qat'
-          test_type: ${{ steps.check_run.outputs.test_type }}
+          name: ${{ env.TEST_STATUS }}-test-results-${{ env.test_type }}_${{ env.CURRENT_TIME }}
+          path: |
+            swag_Automation_QA/*.xml
+            swag_Automation_QA/*.html
+          if-no-files-found: warn
 
   # 手動或排程觸發的測試
   manual_scheduled_test:
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: [self-hosted, macos]
     
+    env:
+      ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
+      TEST_TYPE: ${{ github.event_name == 'schedule' && 'bvt' || inputs.test_type }}
+    
     steps:
-      - name: 設置環境變數
-        id: setup
-        run: |
-          if [[ "${{ github.event_name }}" == "schedule" ]]; then
-            echo "environment=uat" >> $GITHUB_OUTPUT
-            echo "test_type=bvt" >> $GITHUB_OUTPUT
-          else
-            echo "environment=${{ inputs.environment }}" >> $GITHUB_OUTPUT
-            echo "test_type=${{ inputs.test_type }}" >> $GITHUB_OUTPUT
-          fi
+      - name: 檢出程式碼
+        uses: actions/checkout@v4
 
-      - name: 執行測試
-        uses: ./.github/actions/run-test
-        with:
-          environment: ${{ steps.setup.outputs.environment }}
-          test_type: ${{ steps.setup.outputs.test_type }}
-          custom_domain: ${{ inputs.custom_domain }}
-
-# 共用的測試執行動作
-jobs:
-  run-test:
-    name: 執行測試
-    runs-on: [self-hosted, macos]
-    steps:
       - name: 清理工作區
         run: |
           rm -rf swag_Automation_QA/*.xml
           rm -rf swag_Automation_QA/*.html
 
-      - name: 檢出程式碼
-        uses: actions/checkout@v4
-
       - name: 更新網域設定
         if: inputs.custom_domain != ''
         run: |
           cd swag_Automation_QA
-          cp ${inputs.environment}_domain.yaml ${inputs.environment}_domain.yaml.bak
+          cp ${ENVIRONMENT}_domain.yaml ${ENVIRONMENT}_domain.yaml.bak
           
           python3 <<EOF
           import yaml
-          import re
           
           def process_domain_input(input_str):
               if not input_str:
@@ -144,14 +205,14 @@ jobs:
                   
               return f'https://{input_str}.app.swag.live/?lang=zh-TW'
           
-          with open('${inputs.environment}_domain.yaml', 'r', encoding='utf-8') as file:
+          with open('${ENVIRONMENT}_domain.yaml', 'r', encoding='utf-8') as file:
               config = yaml.safe_load(file)
           
           input_domain = '${{ inputs.custom_domain }}'
           processed_url = process_domain_input(input_domain)
           config['SWAG_BASE_URL'] = processed_url
           
-          with open('${inputs.environment}_domain.yaml', 'w', encoding='utf-8') as file:
+          with open('${ENVIRONMENT}_domain.yaml', 'w', encoding='utf-8') as file:
               yaml.dump(config, file, allow_unicode=True, default_flow_style=False)
               
           print("更新後的網域設定：")
@@ -163,26 +224,15 @@ jobs:
         continue-on-error: true
         run: |
           cd swag_Automation_QA
-          if [[ "${inputs.test_type}" == "fulltest" ]]; then
-            arch -arm64 robot \
-              -v BROWSER:chrome \
-              -v SELENIUM_TIMEOUT:60 \
-              -v SELENIUM_IMPLICIT_WAIT:30 \
-              -V data.yaml \
-              -V country.yaml \
-              -V ${inputs.environment}_domain.yaml \
-              TestCase
-          else
-            arch -arm64 robot \
-              -v BROWSER:chrome \
-              -v SELENIUM_TIMEOUT:60 \
-              -v SELENIUM_IMPLICIT_WAIT:30 \
-              -V data.yaml \
-              -V country.yaml \
-              -V ${inputs.environment}_domain.yaml \
-              -i ${inputs.test_type} \
-              TestCase
-          fi
+          arch -arm64 robot \
+            -v BROWSER:chrome \
+            -v SELENIUM_TIMEOUT:60 \
+            -v SELENIUM_IMPLICIT_WAIT:30 \
+            -V data.yaml \
+            -V country.yaml \
+            -V ${ENVIRONMENT}_domain.yaml \
+            -i ${TEST_TYPE} \
+            TestCase
 
       - name: 分析測試結果
         id: analyze_results
@@ -227,18 +277,10 @@ jobs:
               exit(1)
           EOF
 
-      - name: 打印測試結果
-        if: success()
-        run: echo "所有測試均通過！"
-
-      - name: 打印失敗結果
-        if: failure()
-        run: echo "部分測試失敗，請檢查測試結果！"
-
       - name: 上傳測試結果
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.TEST_STATUS }}-test-results-${{ inputs.test_type }}_${{ env.CURRENT_TIME }}
+          name: ${{ env.TEST_STATUS }}-test-results-${{ env.TEST_TYPE }}_${{ env.CURRENT_TIME }}
           path: |
             swag_Automation_QA/*.xml
             swag_Automation_QA/*.html
