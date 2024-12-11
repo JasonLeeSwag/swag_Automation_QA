@@ -80,25 +80,6 @@ jobs:
             robotframework-debuglibrary==2.5.0 \
             charset-normalizer
 
-      - name: 設定 Chrome
-        run: |
-          # 安裝 Chrome
-          brew install --cask google-chrome
-          
-          # 安裝 ChromeDriver
-          brew install --cask chromedriver
-          
-          # 設定權限
-          sudo xattr -rd com.apple.quarantine /Applications/Google\ Chrome.app || true
-          sudo xattr -rd com.apple.quarantine $(which chromedriver) || true
-          
-          # 創建 Chrome 使用者設定檔目錄
-          mkdir -p ~/Library/Application\ Support/Google/Chrome/Default
-          
-          # 檢查版本
-          /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --version
-          chromedriver --version
-
       - name: 執行測試
         id: test
         continue-on-error: true
