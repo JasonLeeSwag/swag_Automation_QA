@@ -49,10 +49,6 @@ jobs:
       - name: 檢出程式碼
         uses: actions/checkout@v4
 
-      - name: 檢查並安裝必要的 Python 模組
-        run: |
-          pip3 install --user matplotlib xmltodict
-
       - name: 執行測試
         id: test
         continue-on-error: true
