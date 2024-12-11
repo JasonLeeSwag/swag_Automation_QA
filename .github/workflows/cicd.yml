@@ -37,6 +37,7 @@ on:
 jobs:
   determine_test_type:
     runs-on: [self-hosted, macos]
+    if: github.event_name == 'pull_request'
     outputs:
       test_type: ${{ steps.set_test.outputs.test_type }}
       should_run: ${{ steps.check_run.outputs.should_run }}
@@ -63,22 +64,18 @@ jobs:
         id: set_test
         if: contains(github.event.pull_request.labels.*.name, 'e2e')
         run: |
-          # 轉換 PR 標題為小寫並存儲
           PR_TITLE="${{ github.event.pull_request.title }}"
           PR_TITLE_LOWER=$(echo "$PR_TITLE" | tr '[:upper:]' '[:lower:]')
           echo "PR 標題: $PR_TITLE"
           
-          # 定義可用的測試類型和對應的關鍵字
           declare -A TEST_KEYWORDS
           TEST_KEYWORDS["login"]="login|sign.?in"
           TEST_KEYWORDS["register"]="register|sign.?up"
           TEST_KEYWORDS["video"]="video|stream|rtc"
           TEST_KEYWORDS["myprofile"]="profile|account"
           
-          # 默認測試類型
           TEST_TYPE="bvt"
           
-          # 檢查標題中的關鍵字
           for test in "${!TEST_KEYWORDS[@]}"; do
             if echo "$PR_TITLE_LOWER" | grep -E "${TEST_KEYWORDS[$test]}" > /dev/null; then
               TEST_TYPE="$test"
@@ -92,12 +89,15 @@ jobs:
 
   test:
     needs: determine_test_type
-    if: needs.determine_test_type.outputs.should_run == 'true'
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && needs.determine_test_type.outputs.should_run == 'true') ||
+      github.event_name == 'schedule'
     runs-on: [self-hosted, macos]
 
     env:
-      ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || 'qat' }}
-      TEST_TYPE: ${{ github.event.pull_request && needs.determine_test_type.outputs.test_type || inputs.test_type || 'bvt' }}
+      ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
+      TEST_TYPE: ${{ github.event_name == 'pull_request' && needs.determine_test_type.outputs.test_type || inputs.test_type }}
       PYTHONPATH: ${{ github.workspace }}/swag_Automation_QA/robotframework/robot_lib
 
     steps:
@@ -112,48 +112,37 @@ jobs:
       - name: 更新網域設定
         run: |
           cd swag_Automation_QA
-          # 備份原始檔案
           cp ${ENVIRONMENT}_domain.yaml ${ENVIRONMENT}_domain.yaml.bak
           
-          # 使用 Python 更新 YAML 檔案
           python3 <<EOF
           import yaml
           import re
           
           def process_domain_input(input_str):
-              # 如果沒有輸入，使用預設值
               if not input_str:
                   return 'https://swag.live/?lang=zh-TW'
                   
-              # 如果是完整的 URL，直接返回
               if input_str.startswith('http'):
                   return input_str
                   
-              # 如果只有版本號（如 v3-210 或 v3-210.1）
               if input_str.startswith('v3-'):
                   return f'https://{input_str}.app.swag.live/?lang=zh-TW'
                   
-              # 如果是完整域名但沒有協議和參數
               if '.app.swag.live' in input_str:
                   return f'https://{input_str}/?lang=zh-TW'
                   
-              # 如果不符合上述任何情況，假設是版本號
               return f'https://{input_str}.app.swag.live/?lang=zh-TW'
           
-          # 讀取原始設定
           with open('${ENVIRONMENT}_domain.yaml', 'r', encoding='utf-8') as file:
               config = yaml.safe_load(file)
           
-          # 處理輸入並更新 URL
           input_domain = '${{ inputs.custom_domain }}'
           processed_url = process_domain_input(input_domain)
           config['SWAG_BASE_URL'] = processed_url
           
-          # 寫回檔案
           with open('${ENVIRONMENT}_domain.yaml', 'w', encoding='utf-8') as file:
               yaml.dump(config, file, allow_unicode=True, default_flow_style=False)
               
-          # 印出更新後的內容以供確認
           print("更新後的網域設定：")
           print(f"SWAG_BASE_URL: {config['SWAG_BASE_URL']}")
           EOF
@@ -164,7 +153,6 @@ jobs:
         run: |
           cd swag_Automation_QA
           if [[ "${{ contains(github.event.pull_request.labels.*.name, 'fulltest') }}" == "true" ]]; then
-            # 執行所有測試
             arch -arm64 robot \
               -v BROWSER:chrome \
               -v SELENIUM_TIMEOUT:60 \
@@ -174,7 +162,6 @@ jobs:
               -V ${ENVIRONMENT}_domain.yaml \
               TestCase
           else
-            # 執行特定測試
             arch -arm64 robot \
               -v BROWSER:chrome \
               -v SELENIUM_TIMEOUT:60 \
@@ -213,7 +200,6 @@ jobs:
 
                   print(f"測試完成！\n通過測試數: {pass_count}\n失敗測試數: {fail_count}")
                   
-                  # 輸出測試結果狀態供後續步驟使用
                   with open(os.environ['GITHUB_ENV'], 'a') as env_file:
                       status_icon = '✅PASS' if fail_count == 0 else '❌FAIL'
                       current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
