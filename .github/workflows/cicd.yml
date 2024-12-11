@@ -43,8 +43,8 @@ jobs:
     steps:
       - name: 清理工作區
         run: |
-          rm -rf swag_Automation_QA/results/
-          rm -rf swag_Automation_QA/reports/
+          rm -rf swag_Automation_QA/*.xml
+          rm -rf swag_Automation_QA/*.html
 
       - name: 檢出程式碼
         uses: actions/checkout@v4
@@ -54,7 +54,6 @@ jobs:
         continue-on-error: true
         run: |
           cd swag_Automation_QA
-          mkdir -p results
           arch -arm64 robot \
             -v BROWSER:chrome \
             -v SELENIUM_TIMEOUT:60 \
@@ -63,7 +62,6 @@ jobs:
             -V country.yaml \
             -V ${ENVIRONMENT}_domain.yaml \
             -i ${TEST_TYPE} \
-            --outputdir results \
             TestCase
 
       - name: 分析測試結果
@@ -73,22 +71,32 @@ jobs:
           import os
           from xml.etree import ElementTree as ET
 
-          result_file = 'swag_Automation_QA/results/output.xml'
+          result_file = 'swag_Automation_QA/output.xml'
           pass_count = fail_count = 0
 
-          if os.path.exists(result_file):
-              tree = ET.parse(result_file)
-              root = tree.getroot()
-              for suite in root.iter('suite'):
-                  for test in suite.iter('test'):
-                      if test.attrib['status'] == 'PASS':
-                          pass_count += 1
-                      elif test.attrib['status'] == 'FAIL':
-                          fail_count += 1
+          try:
+              if os.path.exists(result_file):
+                  tree = ET.parse(result_file)
+                  root = tree.getroot()
+                  for suite in root.findall('.//suite'):
+                      for test in suite.findall('.//test'):
+                          status_elem = test.find('status')
+                          if status_elem is not None:
+                              status = status_elem.get('status', '').upper()
+                              if status == 'PASS':
+                                  pass_count += 1
+                              elif status == 'FAIL':
+                                  fail_count += 1
 
-          print(f"測試完成！\n通過測試數: {pass_count}\n失敗測試數: {fail_count}")
-
-          if fail_count > 0:
+                  print(f"測試完成！\n通過測試數: {pass_count}\n失敗測試數: {fail_count}")
+                  
+                  if fail_count > 0:
+                      exit(1)
+              else:
+                  print(f"找不到測試結果檔案：{result_file}")
+                  exit(1)
+          except Exception as e:
+              print(f"分析測試結果時發生錯誤：{str(e)}")
               exit(1)
           EOF
 
@@ -105,5 +113,6 @@ jobs:
         with:
           name: test-results-${{ env.TEST_TYPE }}
           path: |
-            swag_Automation_QA/results/
+            swag_Automation_QA/*.xml
+            swag_Automation_QA/*.html
           if-no-files-found: warn
