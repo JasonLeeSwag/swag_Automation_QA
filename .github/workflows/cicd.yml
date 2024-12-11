@@ -55,7 +55,7 @@ jobs:
         run: |
           cd swag_Automation_QA
           mkdir -p results
-          arch -arm64 robot \
+          robot \
             -v BROWSER:chrome \
             -v SELENIUM_TIMEOUT:60 \
             -v SELENIUM_IMPLICIT_WAIT:30 \
@@ -66,37 +66,43 @@ jobs:
             --outputdir results \
             TestCase
 
-      - name: 分析測試結果並生成視覺化圖表
+      - name: 分析測試結果並生成視覺化 Markdown 報告
         id: analyze_results
         run: |
           python3 <<EOF
           import xml.etree.ElementTree as ET
-          import matplotlib.pyplot as plt
           import os
 
           # 讀取測試結果
           result_file = 'swag_Automation_QA/results/output.xml'
+          markdown_file = 'swag_Automation_QA/results/test_results.md'
+
           pass_count = fail_count = 0
+          detailed_results = []
 
           if os.path.exists(result_file):
               tree = ET.parse(result_file)
               root = tree.getroot()
               for suite in root.iter('suite'):
                   for test in suite.iter('test'):
-                      if test.attrib.get('status') == 'PASS':
+                      name = test.attrib.get('name', 'Unknown')
+                      status = test.attrib.get('status', 'UNKNOWN')
+                      detailed_results.append(f"| {name} | {status} |")
+                      if status == 'PASS':
                           pass_count += 1
-                      elif test.attrib.get('status') == 'FAIL':
+                      elif status == 'FAIL':
                           fail_count += 1
 
-          # 生成圓餅圖
-          labels = ['Passed', 'Failed']
-          sizes = [pass_count, fail_count]
-          colors = ['#4CAF50', '#FF5722']
-
-          plt.figure(figsize=(6, 6))
-          plt.pie(sizes, labels=labels, autopct='%1.1f%%', colors=colors, startangle=140)
-          plt.title('Test Results Overview')
-          plt.savefig('swag_Automation_QA/results/test_results_pie_chart.png')
+          # 生成 Markdown 報告
+          with open(markdown_file, 'w') as md_file:
+              md_file.write(f"# 測試結果報告\n\n")
+              md_file.write(f"## 測試總覽\n\n")
+              md_file.write(f"- **通過測試數**: {pass_count}\n")
+              md_file.write(f"- **失敗測試數**: {fail_count}\n\n")
+              md_file.write("## 詳細測試結果\n\n")
+              md_file.write("| 測試名稱 | 測試結果 |\n")
+              md_file.write("|----------|----------|\n")
+              md_file.writelines([f"{line}\n" for line in detailed_results])
           EOF
 
       - name: 上傳測試結果
@@ -120,14 +126,12 @@ jobs:
             **環境**: `${{ env.ENVIRONMENT }}`
             **測試類型**: `${{ env.TEST_TYPE }}`
 
-            ### 測試結果摘要
+            ### 測試結果總覽
             - 通過測試: `${{ steps.analyze_results.outputs.pass_count }}`
             - 失敗測試: `${{ steps.analyze_results.outputs.fail_count }}`
 
-            ![測試結果](swag_Automation_QA/results/test_results_pie_chart.png)
-
-            ### 測試報告
-            [下載完整測試報告](swag_Automation_QA/results/log.html)
+            ### 詳細測試結果
+            ![查看完整測試報告](swag_Automation_QA/results/test_results.md)
 
           commit-message: "自動化測試結果分析"
           branch: "auto-test-results-${{ github.run_number }}"
