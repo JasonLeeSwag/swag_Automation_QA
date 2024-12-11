@@ -30,6 +30,11 @@ on:
           - register
           - video
           - myprofile
+      custom_domain:
+        description: '自定義測試網域 (例如: v3-211.app.swag.live)'
+        required: false
+        type: string
+        default: 'swag.live'
 
 jobs:
   test:
@@ -48,6 +53,34 @@ jobs:
 
       - name: 檢出程式碼
         uses: actions/checkout@v4
+
+      - name: 更新網域設定
+        if: inputs.custom_domain != ''
+        run: |
+          cd swag_Automation_QA
+          # 備份原始檔案
+          cp ${ENVIRONMENT}_domain.yaml ${ENVIRONMENT}_domain.yaml.bak
+          
+          # 使用 Python 更新 YAML 檔案
+          python3 <<EOF
+          import yaml
+          
+          # 讀取原始設定
+          with open('${ENVIRONMENT}_domain.yaml', 'r', encoding='utf-8') as file:
+              config = yaml.safe_load(file)
+          
+          # 更新網域
+          custom_domain = '${{ inputs.custom_domain }}'
+          config['SWAG_BASE_URL'] = f'https://{custom_domain}/?lang=zh-TW'
+          
+          # 寫回檔案
+          with open('${ENVIRONMENT}_domain.yaml', 'w', encoding='utf-8') as file:
+              yaml.dump(config, file, allow_unicode=True, default_flow_style=False)
+              
+          # 印出更新後的內容以供確認
+          print("更新後的網域設定：")
+          print(f"SWAG_BASE_URL: {config['SWAG_BASE_URL']}")
+          EOF
 
       - name: 執行測試
         id: test
