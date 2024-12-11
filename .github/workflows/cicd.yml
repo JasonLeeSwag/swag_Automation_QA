@@ -70,6 +70,7 @@ jobs:
           python3 <<EOF
           import os
           from xml.etree import ElementTree as ET
+          from datetime import datetime
 
           result_file = 'swag_Automation_QA/output.xml'
           pass_count = fail_count = 0
@@ -89,6 +90,13 @@ jobs:
                                   fail_count += 1
 
                   print(f"測試完成！\n通過測試數: {pass_count}\n失敗測試數: {fail_count}")
+                  
+                  # 輸出測試結果狀態供後續步驟使用
+                  with open(os.environ['GITHUB_ENV'], 'a') as env_file:
+                      status_icon = '✅PASS' if fail_count == 0 else '❌FAIL'
+                      current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
+                      env_file.write(f'TEST_STATUS={status_icon}\n')
+                      env_file.write(f'CURRENT_TIME={current_time}\n')
                   
                   if fail_count > 0:
                       exit(1)
@@ -111,7 +119,7 @@ jobs:
       - name: 上傳測試結果
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ env.TEST_TYPE }}
+          name: ${{ env.TEST_STATUS }}-test-results-${{ env.TEST_TYPE }}_${{ env.CURRENT_TIME }}
           path: |
             swag_Automation_QA/*.xml
             swag_Automation_QA/*.html
