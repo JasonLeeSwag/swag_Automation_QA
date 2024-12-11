@@ -17,29 +17,28 @@ on:
         default: 'qat'
         type: choice
         options:
-        - qat
-        - uat
+          - qat
+          - uat
       test_type:
         description: '選擇測試類型'
         required: true
         default: 'bvt'
         type: choice
         options:
-        - bvt
-        - login
-        - register
-        - video
-        - myprofile
+          - bvt
+          - login
+          - register
+          - video
+          - myprofile
 
 jobs:
   test:
     runs-on: [self-hosted, macos]
 
     env:
-      ENVIRONMENT: ${{ github.event.inputs.environment || 'qat' }}
-      TEST_TYPE: ${{ github.event.inputs.test_type || 'bvt' }}
+      ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment }}
+      TEST_TYPE: ${{ (github.event_name == 'schedule' || github.event_name == 'pull_request') && 'bvt' || inputs.test_type }}
       PYTHONPATH: ${{ github.workspace }}/swag_Automation_QA/robotframework/robot_lib
-      OBJC_DISABLE_INITIALIZE_FORK_SAFETY: YES
 
     steps:
       - name: 清理工作區
@@ -67,36 +66,27 @@ jobs:
             --outputdir results \
             TestCase
 
-      - name: 上傳測試結果
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results-${{ env.TEST_TYPE }}
-          path: swag_Automation_QA/results/
-          if-no-files-found: warn
-
       - name: 分析測試結果並生成視覺化圖表
         id: analyze_results
         run: |
           python3 <<EOF
-          import os
           import xml.etree.ElementTree as ET
           import matplotlib.pyplot as plt
+          import os
 
-          # 解析 Robot Framework 的 output.xml
+          # 讀取測試結果
           result_file = 'swag_Automation_QA/results/output.xml'
-          pass_count = 0
-          fail_count = 0
+          pass_count = fail_count = 0
 
           if os.path.exists(result_file):
               tree = ET.parse(result_file)
               root = tree.getroot()
-
-              for test in root.iter('test'):
-                  if test.attrib.get('status') == 'PASS':
-                      pass_count += 1
-                  elif test.attrib.get('status') == 'FAIL':
-                      fail_count += 1
+              for suite in root.iter('suite'):
+                  for test in suite.iter('test'):
+                      if test.attrib['status'] == 'PASS':
+                          pass_count += 1
+                      elif test.attrib['status'] == 'FAIL':
+                          fail_count += 1
 
           # 生成圓餅圖
           labels = ['Passed', 'Failed']
@@ -107,21 +97,23 @@ jobs:
           plt.pie(sizes, labels=labels, autopct='%1.1f%%', colors=colors, startangle=140)
           plt.title('Test Results Overview')
           plt.savefig('swag_Automation_QA/results/test_results_pie_chart.png')
-
-          # 輸出數據
-          print(f'PASS_COUNT={pass_count}')
-          print(f'FAIL_COUNT={fail_count}')
           EOF
+
+      - name: 上傳測試結果
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ env.TEST_TYPE }}
+          path: |
+            swag_Automation_QA/results/
+          if-no-files-found: warn
 
       - name: 提交自動生成的 PR
         uses: peter-evans/create-pull-request@v5
         with:
-          title: ${{ format(
-            '{0}-{1}-QA Full-Test',
-            github.event_name == 'workflow_dispatch' && '手動觸發' || 
-            github.event_name == 'pull_request' && 'e2e自動觸發' || 
-            '定時自動觸發'
-          ) }}
+          title: |
+            ${{ github.event_name == 'workflow_dispatch' && '手動觸發' || 
+                github.event_name == 'pull_request' && 'e2e自動觸發' || 
+                '定時自動觸發' }}-QA Full-Test
           body: |
             ### 測試執行時間: `${{ github.run_started_at }}`
             
@@ -129,13 +121,13 @@ jobs:
             **測試類型**: `${{ env.TEST_TYPE }}`
 
             ### 測試結果摘要
-            - 通過測試: `${{ steps.analyze_results.outputs.PASS_COUNT }}`
-            - 失敗測試: `${{ steps.analyze_results.outputs.FAIL_COUNT }}`
+            - 通過測試: `${{ steps.analyze_results.outputs.pass_count }}`
+            - 失敗測試: `${{ steps.analyze_results.outputs.fail_count }}`
 
             ![測試結果](swag_Automation_QA/results/test_results_pie_chart.png)
 
             ### 測試報告
-            [下載完整測試報告](./swag_Automation_QA/results/log.html)
+            [下載完整測試報告](swag_Automation_QA/results/log.html)
 
           commit-message: "自動化測試結果分析"
           branch: "auto-test-results-${{ github.run_number }}"
