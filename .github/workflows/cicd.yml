@@ -5,66 +5,99 @@ on:
     - cron: '0 9 * * 1'
 
   pull_request:
-    types: [opened, synchronize, reopened]
-    labels:
-      - fulltest
-      - e2e
+    types: [opened, synchronize, reopened, labeled]
+    
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: '選擇測試環境'
+        required: true
+        default: 'qat'
+        type: choice
+        options:
+          - qat
+          - uat
+      test_type:
+        description: '選擇測試類型'
+        required: true
+        default: 'bvt'
+        type: choice
+        options:
+          - bvt
+          - login
+          - register
+          - video
+          - myprofile
+      custom_domain:
+        description: '自定義網域 (可輸入完整URL或版本號，例如: https://v3-210.app.swag.live/?lang=zh-TW 或 v3-210.app.swag.live 或 v3-210 或 v3-210.1)'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   determine_test_type:
     runs-on: [self-hosted, macos]
     outputs:
       test_type: ${{ steps.set_test.outputs.test_type }}
-      
+      should_run: ${{ steps.check_run.outputs.should_run }}
+    
     steps:
-      - name: 設定測試類型
-        id: set_test
+      - name: 檢查標籤和決定測試類型
+        id: check_run
         run: |
-          # 檢查 PR 標籤
           LABELS="${{ join(github.event.pull_request.labels.*.name, ' ') }}"
-          PR_TITLE="${{ github.event.pull_request.title }}"
-          
-          # 轉換 PR 標題為小寫以便比對
-          TITLE_LOWER=$(echo "$PR_TITLE" | tr '[:upper:]' '[:lower:]')
+          echo "Labels: $LABELS"
           
           if [[ $LABELS == *"fulltest"* ]]; then
-            echo "檢測到 fulltest 標籤，執行完整測試"
-            echo "test_type=bvt" >> $GITHUB_OUTPUT
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            echo "找到 fulltest 標籤，將執行完整測試"
           elif [[ $LABELS == *"e2e"* ]]; then
-            # 定義可能的測試類型和它們的關鍵字
-            declare -A test_patterns=(
-              ["login"]="login|登入"
-              ["register"]="register|註冊|注册|signup"
-              ["video"]="video|視頻|视频|直播"
-              ["myprofile"]="profile|個人資料|个人资料"
-            )
-            
-            # 預設測試類型
-            TEST_TYPE="bvt"
-            
-            # 遍歷所有測試類型尋找匹配
-            for test in "${!test_patterns[@]}"; do
-              pattern="${test_patterns[$test]}"
-              if echo "$TITLE_LOWER" | grep -qE "$pattern"; then
-                TEST_TYPE="$test"
-                break
-              fi
-            done
-            
-            echo "根據 PR 標題 '$PR_TITLE' 選擇測試類型: $TEST_TYPE"
-            echo "test_type=$TEST_TYPE" >> $GITHUB_OUTPUT
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            echo "找到 e2e 標籤，將根據 PR 標題決定測試範圍"
           else
-            echo "無特殊標籤，使用預設測試類型"
-            echo "test_type=bvt" >> $GITHUB_OUTPUT
+            echo "should_run=false" >> $GITHUB_OUTPUT
+            echo "未找到相關標籤，不執行測試"
           fi
+
+      - name: 分析 PR 標題和設置測試類型
+        id: set_test
+        if: contains(github.event.pull_request.labels.*.name, 'e2e')
+        run: |
+          # 轉換 PR 標題為小寫並存儲
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_TITLE_LOWER=$(echo "$PR_TITLE" | tr '[:upper:]' '[:lower:]')
+          echo "PR 標題: $PR_TITLE"
+          
+          # 定義可用的測試類型和對應的關鍵字
+          declare -A TEST_KEYWORDS
+          TEST_KEYWORDS["login"]="login|sign.?in"
+          TEST_KEYWORDS["register"]="register|sign.?up"
+          TEST_KEYWORDS["video"]="video|stream|rtc"
+          TEST_KEYWORDS["myprofile"]="profile|account"
+          
+          # 默認測試類型
+          TEST_TYPE="bvt"
+          
+          # 檢查標題中的關鍵字
+          for test in "${!TEST_KEYWORDS[@]}"; do
+            if echo "$PR_TITLE_LOWER" | grep -E "${TEST_KEYWORDS[$test]}" > /dev/null; then
+              TEST_TYPE="$test"
+              echo "匹配到測試類型: $test"
+              break
+            fi
+          done
+          
+          echo "test_type=$TEST_TYPE" >> $GITHUB_OUTPUT
+          echo "將執行的測試類型: $TEST_TYPE"
 
   test:
     needs: determine_test_type
+    if: needs.determine_test_type.outputs.should_run == 'true'
     runs-on: [self-hosted, macos]
 
     env:
       ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || 'qat' }}
-      TEST_TYPE: ${{ needs.determine_test_type.outputs.test_type }}
+      TEST_TYPE: ${{ github.event.pull_request && needs.determine_test_type.outputs.test_type || inputs.test_type || 'bvt' }}
       PYTHONPATH: ${{ github.workspace }}/swag_Automation_QA/robotframework/robot_lib
 
     steps:
@@ -77,7 +110,6 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 更新網域設定
-        if: inputs.custom_domain != ''
         run: |
           cd swag_Automation_QA
           # 備份原始檔案
@@ -131,15 +163,28 @@ jobs:
         continue-on-error: true
         run: |
           cd swag_Automation_QA
-          arch -arm64 robot \
-            -v BROWSER:chrome \
-            -v SELENIUM_TIMEOUT:60 \
-            -v SELENIUM_IMPLICIT_WAIT:30 \
-            -V data.yaml \
-            -V country.yaml \
-            -V ${ENVIRONMENT}_domain.yaml \
-            -i ${TEST_TYPE} \
-            TestCase
+          if [[ "${{ contains(github.event.pull_request.labels.*.name, 'fulltest') }}" == "true" ]]; then
+            # 執行所有測試
+            arch -arm64 robot \
+              -v BROWSER:chrome \
+              -v SELENIUM_TIMEOUT:60 \
+              -v SELENIUM_IMPLICIT_WAIT:30 \
+              -V data.yaml \
+              -V country.yaml \
+              -V ${ENVIRONMENT}_domain.yaml \
+              TestCase
+          else
+            # 執行特定測試
+            arch -arm64 robot \
+              -v BROWSER:chrome \
+              -v SELENIUM_TIMEOUT:60 \
+              -v SELENIUM_IMPLICIT_WAIT:30 \
+              -V data.yaml \
+              -V country.yaml \
+              -V ${ENVIRONMENT}_domain.yaml \
+              -i ${TEST_TYPE} \
+              TestCase
+          fi
 
       - name: 分析測試結果
         id: analyze_results
