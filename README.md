@@ -28,29 +28,6 @@
 - Chrome 瀏覽器 (最新版本)
 - Git
 
-### 框架與套件版本
-- Robot Framework 6.1.1
-- robotframework-seleniumlibrary 6.1.3
-- robotframework-requests 0.9.5
-- robotframework-databaselibrary 1.2.4
-- robotframework-pabot 2.16.0
-- robotframework-faker 5.0.0
-- robotframework-jsonlibrary 0.5
-- robotframework-excellib 2.0.1
-- robotframework-browser 17.5.2
-- robotframework-pythonlibcore 4.3.0
-- robotframework-stacktrace 0.4.1
-
-### Python 相關套件
-- selenium 4.15.2
-- requests 2.31.0
-- PyYAML 6.0.1
-- python-dotenv 1.0.0
-- cryptography 41.0.5
-- pytest 7.4.3
-- allure-pytest 2.13.2
-- webdriver_manager 4.0.1
-
 ## 安裝說明
 
 ### Windows 安裝步驟
@@ -199,15 +176,86 @@ swag_Automation_QA/
 
 ## 執行測試
 
-### 測試影片Demo
-- [登入-測試影片](https://drive.google.com/file/d/1UJWWOGw0MIaYVYnrk23Huhf0ENFYWoLt/view?usp=drive_link)
-- [註冊-測試影片](https://drive.google.com/file/d/12dQ7HmiLFW_3jb9x1QmaEzOCihKLGyD6/view?usp=drive_link)
-- [解鎖影片(含Bonus)-測試影片](https://drive.google.com/file/d/11Aut5KEqlWZpN5R3ZmYzH9uMdjf0G5GT/view?usp=drive_link)
-- [全部測試流程(含Bonus)-測試影片](https://drive.google.com/file/d/1PzmL_lP_5LHWFfmbJbUl6El9-VHZOdMP/view?usp=drive_link)
+### CI/CD 自動化測試
+
+本專案使用 GitHub Actions 實現自動化測試，支援以下觸發方式：
+
+1. **排程執行**
+   - 每週一上午 9 點自動執行
+   - 執行環境：UAT
+   - 執行範圍：BVT 測試
+
+2. **Pull Request 觸發**
+   - 條件：PR 包含特定標籤
+   - 支援兩種標籤模式：
+     - `fulltest`：執行完整測試套件
+     - `e2e`：根據 PR 標題智能選擇測試範圍
+   - 標題關鍵字對應：
+     ```
+     login/sign-in    → 執行登入測試
+     register/sign-up → 執行註冊測試
+     video/stream/rtc → 執行影片測試
+     profile/account  → 執行個人資料測試
+     ```
+
+3. **手動觸發**
+   - 支援參數：
+     - 測試環境：QAT/UAT
+     - 測試類型：bvt/login/register/video/myprofile
+     - 自定義網域：支援多種格式
+       ```
+       完整 URL：https://v3-210.app.swag.live/?lang=zh-TW
+       域名：v3-210.app.swag.live
+       版本號：v3-210
+       子版本：v3-210.1
+       ```
+
+### 測試結果與報告
+
+測試執行完成後會生成以下格式的報告：
+```
+[狀態圖示]-test-results-[測試類型]_Total[測試案例數]_[時間戳記].zip
+```
+例如：
+- ✅PASS-test-results-login_Total15_20241211_153000.zip
+- ❌FAIL-test-results-register_Total12_20241211_153000.zip
+
+報告內容包含：
+- 測試執行日誌（log.html）
+- 測試結果報告（report.html）
+- 測試執行記錄（output.xml）
+
+### 工作流程配置
+
+專案的自動化測試工作流程定義在 `.github/workflows/cicd.yml` 中，主要包含：
+
+1. **工作流程觸發條件**
+   ```yaml
+   on:
+     schedule:
+       - cron: '0 9 * * 1'
+     pull_request:
+       types: [opened, synchronize, reopened, labeled]
+     workflow_dispatch:
+       # 手動觸發時的輸入參數配置
+   ```
+
+2. **主要工作（Jobs）**
+   - `pr_test`：處理 PR 觸發的測試
+   - `manual_scheduled_test`：處理手動和排程觸發的測試
+
+3. **環境設定**
+   - 支援 QAT/UAT 環境切換
+   - 支援自定義測試網域
+   - 自動備份和還原配置文件
+
+4. **結果處理**
+   - 詳細的測試案例執行統計
+   - 自動化測試報告生成
+   - 測試結果存檔
 
 ### 測試報告檔案(UI/API)
 - [詳細測試報告(含Bonus)](https://drive.google.com/drive/folders/1XO6iYtLLHyAO1-pvGGjM7VZFntu2SSPz?usp=sharing)
-
 
 ### 基本執行命令
 ```bash
@@ -338,6 +386,20 @@ robot -V data.yaml -V country.yaml -V qat_domain.yaml -i bvt TestCase
 2. 確認測試環境是否正常
 3. 查看詳細的測試報告和日誌
 
+### CI/CD 相關問題
+
+1. **PR 測試未觸發**
+   - 檢查 PR 是否有正確的標籤（e2e 或 fulltest）
+   - 確認 PR 標題是否包含相關關鍵字
+
+2. **手動觸發失敗**
+   - 確認輸入參數是否正確
+   - 檢查目標環境是否可用
+
+3. **測試報告問題**
+   - 確保測試過程中生成了必要的報告文件
+   - 檢查報告文件的權限設定
+
 ## 參考資料
 
 ### XPath 相關資源
@@ -426,3 +488,9 @@ robot -V data.yaml -V country.yaml -V qat_domain.yaml -i bvt TestCase
 - [Git 版本控制最佳實踐](https://www.atlassian.com/git/tutorials/comparing-workflows)
 - [Python 測試自動化](https://realpython.com/python-testing/)
 - [敏捷測試方法論](https://www.agilealliance.org/agile101/agile-testing/)
+
+### CI/CD 相關資源
+
+- [GitHub Actions 文檔](https://docs.github.com/en/actions)
+- [GitHub Actions 最佳實踐](https://docs.github.com/en/actions/learn-github-actions/best-practices-for-github-actions)
+- [Robot Framework 與 CI/CD 整合](https://github.com/robotframework/robotframework/blob/master/doc/releasenotes/rf-3.1.rst)
