@@ -55,7 +55,7 @@ jobs:
         run: |
           cd swag_Automation_QA
           mkdir -p results
-          robot \
+          arch -arm64 robot \
             -v BROWSER:chrome \
             -v SELENIUM_TIMEOUT:60 \
             -v SELENIUM_IMPLICIT_WAIT:30 \
@@ -83,9 +83,9 @@ jobs:
               root = tree.getroot()
               for suite in root.iter('suite'):
                   for test in suite.iter('test'):
-                      if test.attrib['status'] == 'PASS':
+                      if test.attrib.get('status') == 'PASS':
                           pass_count += 1
-                      elif test.attrib['status'] == 'FAIL':
+                      elif test.attrib.get('status') == 'FAIL':
                           fail_count += 1
 
           # 生成圓餅圖
