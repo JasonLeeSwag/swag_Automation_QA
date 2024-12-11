@@ -66,7 +66,7 @@ jobs:
             --outputdir results \
             TestCase
 
-      - name: 分析測試結果並生成視覺化 Markdown 報告
+      - name: 分析測試結果並生成 Markdown 報告
         id: analyze_results
         run: |
           python3 <<EOF
@@ -131,7 +131,7 @@ jobs:
             - 失敗測試: `${{ steps.analyze_results.outputs.fail_count }}`
 
             ### 詳細測試結果
-            ![查看完整測試報告](swag_Automation_QA/results/test_results.md)
+            [查看詳細報告](swag_Automation_QA/results/test_results.md)
 
           commit-message: "自動化測試結果分析"
           branch: "auto-test-results-${{ github.run_number }}"
