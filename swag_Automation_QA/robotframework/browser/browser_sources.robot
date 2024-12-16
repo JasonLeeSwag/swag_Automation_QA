@@ -1,3 +1,4 @@
+# swag_Automation_QA/robotframework/browser/browser_sources.robot
 *** Settings ***
 Library  Collections
 Library  OperatingSystem

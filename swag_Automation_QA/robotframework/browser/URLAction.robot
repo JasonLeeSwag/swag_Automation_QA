@@ -1,3 +1,4 @@
+# swag_Automation_QA/robotframework/browser/BrowserAction.robot
 *** Keywords ***
 Get Location And Split String
     [Arguments]  ${separator}  ${index}

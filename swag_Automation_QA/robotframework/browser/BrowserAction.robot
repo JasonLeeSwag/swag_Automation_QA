@@ -1,3 +1,4 @@
+# swag_Automation_QA/robotframework/browser/BrowserAction.robot
 *** Variables ***
 # system arguments  user can use headless mode with --variable DEFAULT_CHROME_OPTIONS:"--lang=zh-tw --headless --disable-gpu --window-size=1920,1080"
 ${DEFAULT_CHROME_OPTIONS}  --lang=en-US --disable-gpu --no-sandbox --start-maximized

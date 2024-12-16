@@ -3,6 +3,7 @@
 ENV :
 - 'qat'
 - 'uat'
+- 'prod'
 
 # Stadmin 測試資料
 STADMIN :

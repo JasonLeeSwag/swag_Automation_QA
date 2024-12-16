@@ -1,3 +1,4 @@
+# swag_Automation_QA/robotframework/browser/BrowserAction.robot
 *** Variables ***
 ${delay_for_loading_page}  10 s
 
