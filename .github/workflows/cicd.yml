@@ -5,7 +5,7 @@ on:
     - cron: '0 9 * * 1'  # 每週一早上 9 點執行
 
   issues:
-    types: [opened, edited]
+    types: [opened, edited, labeled, unlabeled]  # 添加標籤相關事件
     
   pull_request:
     types: [opened, synchronize, reopened, labeled, edited]
@@ -20,18 +20,11 @@ on:
         options:
           - qat
           - uat
-      test_type:
-        description: '選擇測試類型'
+      test_types:
+        description: '選擇測試類型 (可多選，用逗號分隔：bvt,login,register)'
         required: true
         default: 'bvt'
-        type: choice
-        options:
-          - bvt
-          - login
-          - register
-          - video
-          - myprofile
-          - fulltest
+        type: string
       custom_domain:
         description: '自定義網域 (可輸入完整URL或版本號)'
         required: false
@@ -48,7 +41,7 @@ jobs:
     runs-on: [self-hosted, macos]
     outputs:
       should_run: ${{ steps.check_conditions.outputs.should_run }}
-      test_type: ${{ steps.check_conditions.outputs.test_type }}
+      test_types: ${{ steps.check_conditions.outputs.test_types }}
       environment: ${{ steps.check_conditions.outputs.environment }}
       base_url: ${{ steps.check_conditions.outputs.base_url }}
     
@@ -58,7 +51,7 @@ jobs:
         run: |
           # 初始化變數
           SHOULD_RUN="true"
-          TEST_TYPE=""
+          TEST_TYPES="[]"
           ENVIRONMENT=""
           BASE_URL=""
           
@@ -66,13 +59,15 @@ jobs:
           case "${{ github.event_name }}" in
             "schedule")
               echo "排程觸發 - 週一自動執行"
-              TEST_TYPE="bvt"
+              TEST_TYPES='["bvt"]'
               ENVIRONMENT="uat"
               ;;
               
             "workflow_dispatch")
               echo "手動觸發"
-              TEST_TYPE="${{ inputs.test_type }}"
+              # 將輸入的測試類型轉換為陣列
+              IFS=',' read -ra TYPES <<< "${{ inputs.test_types }}"
+              TEST_TYPES="[$(printf '"%s",' "${TYPES[@]}" | sed 's/,$/')]"
               ENVIRONMENT="${{ inputs.environment }}"
               if [[ -n "${{ inputs.custom_domain }}" ]]; then
                 BASE_URL="${{ inputs.custom_domain }}"
@@ -82,21 +77,22 @@ jobs:
             "pull_request")
               echo "PR 觸發"
               if [[ "${{ contains(github.event.pull_request.labels.*.name, 'fulltest') }}" == "true" ]]; then
-                TEST_TYPE="fulltest"
+                TEST_TYPES='["bvt","login","register","video","myprofile"]'
                 ENVIRONMENT="qat"
               elif [[ "${{ contains(github.event.pull_request.labels.*.name, 'e2e') }}" == "true" ]]; then
                 TITLE=$(echo "${{ github.event.pull_request.title }}" | tr '[:upper:]' '[:lower:]')
-                if [[ $TITLE =~ login|sign.?in ]]; then
-                  TEST_TYPE="login"
-                elif [[ $TITLE =~ register|sign.?up ]]; then
-                  TEST_TYPE="register"
-                elif [[ $TITLE =~ video|stream|rtc ]]; then
-                  TEST_TYPE="video"
-                elif [[ $TITLE =~ profile|account ]]; then
-                  TEST_TYPE="myprofile"
-                else
-                  TEST_TYPE="bvt"
+                DETECTED_TYPES=()
+                
+                [[ $TITLE =~ login|sign.?in ]] && DETECTED_TYPES+=("login")
+                [[ $TITLE =~ register|sign.?up ]] && DETECTED_TYPES+=("register")
+                [[ $TITLE =~ video|stream|rtc ]] && DETECTED_TYPES+=("video")
+                [[ $TITLE =~ profile|account ]] && DETECTED_TYPES+=("myprofile")
+                
+                if [ ${#DETECTED_TYPES[@]} -eq 0 ]; then
+                  DETECTED_TYPES+=("bvt")
                 fi
+                
+                TEST_TYPES="[$(printf '"%s",' "${DETECTED_TYPES[@]}" | sed 's/,$/')]"
                 ENVIRONMENT="qat"
               else
                 SHOULD_RUN="false"
@@ -105,36 +101,61 @@ jobs:
               
             "issues")
               echo "Issue 觸發"
-              if [[ "${{ contains(github.event.issue.labels.*.name, 'e2e') }}" == "true" ]]; then
-                TEST_TYPE="bvt"
+              DETECTED_TYPES=()
+              
+              # 檢查特定測試標籤
+              if [[ "${{ contains(github.event.issue.labels.*.name, 'test:all') }}" == "true" ]]; then
+                TEST_TYPES='["bvt","login","register","video","myprofile"]'
+              else
+                # 檢查 e2e 標籤
+                if [[ "${{ contains(github.event.issue.labels.*.name, 'e2e') }}" == "true" ]]; then
+                  DETECTED_TYPES+=("bvt")
+                fi
+                
+                # 檢查各個功能測試標籤
+                [[ "${{ contains(github.event.issue.labels.*.name, 'test:login') }}" == "true" ]] && DETECTED_TYPES+=("login")
+                [[ "${{ contains(github.event.issue.labels.*.name, 'test:register') }}" == "true" ]] && DETECTED_TYPES+=("register")
+                [[ "${{ contains(github.event.issue.labels.*.name, 'test:video') }}" == "true" ]] && DETECTED_TYPES+=("video")
+                [[ "${{ contains(github.event.issue.labels.*.name, 'test:profile') }}" == "true" ]] && DETECTED_TYPES+=("myprofile")
+                
+                if [ ${#DETECTED_TYPES[@]} -eq 0 ]; then
+                  SHOULD_RUN="false"
+                else
+                  TEST_TYPES="[$(printf '"%s",' "${DETECTED_TYPES[@]}" | sed 's/,$/')]"
+                fi
+              fi
+              
+              if [[ "${SHOULD_RUN}" == "true" ]]; then
                 ENVIRONMENT="qat"
                 # 檢查 Issue 內容中的自定義網域
                 if [[ "${{ github.event.issue.body }}" =~ base_url:[[:space:]]*(http[s]?:\/\/[^\s]*) ]]; then
                   BASE_URL="${BASH_REMATCH[1]}"
                 fi
-              else
-                SHOULD_RUN="false"
               fi
               ;;
           esac
           
           # 輸出結果
           echo "should_run=${SHOULD_RUN}" >> $GITHUB_OUTPUT
-          echo "test_type=${TEST_TYPE}" >> $GITHUB_OUTPUT
+          echo "test_types=${TEST_TYPES}" >> $GITHUB_OUTPUT
           echo "environment=${ENVIRONMENT}" >> $GITHUB_OUTPUT
           echo "base_url=${BASE_URL}" >> $GITHUB_OUTPUT
           
           # 輸出日誌
           echo "設置結果:"
           echo "Should Run: ${SHOULD_RUN}"
-          echo "Test Type: ${TEST_TYPE}"
+          echo "Test Types: ${TEST_TYPES}"
           echo "Environment: ${ENVIRONMENT}"
           echo "Base URL: ${BASE_URL}"
 
-  run_tests:
+  run_parallel_tests:
     needs: check_and_prepare
     if: needs.check_and_prepare.outputs.should_run == 'true'
     runs-on: [self-hosted, macos]
+    strategy:
+      fail-fast: false  # 某個測試失敗不會影響其他測試
+      matrix:
+        test_type: ${{ fromJson(needs.check_and_prepare.outputs.test_types) }}
     
     steps:
       - name: 檢出程式碼
@@ -143,19 +164,25 @@ jobs:
       - name: 顯示測試配置
         run: |
           echo "測試環境: ${{ needs.check_and_prepare.outputs.environment }}"
-          echo "測試類型: ${{ needs.check_and_prepare.outputs.test_type }}"
+          echo "測試類型: ${{ matrix.test_type }}"
           echo "基礎網址: ${{ needs.check_and_prepare.outputs.base_url }}"
+
+      - name: 建立工作目錄
+        run: |
+          WORK_DIR="swag_Automation_QA_${{ matrix.test_type }}"
+          cp -r swag_Automation_QA $WORK_DIR
+          echo "WORK_DIR=$WORK_DIR" >> $GITHUB_ENV
 
       - name: 清理工作區
         run: |
-          rm -rf swag_Automation_QA/*.xml
-          rm -rf swag_Automation_QA/*.html
-          rm -rf swag_Automation_QA/screenshots
+          rm -rf ${{ env.WORK_DIR }}/*.xml
+          rm -rf ${{ env.WORK_DIR }}/*.html
+          rm -rf ${{ env.WORK_DIR }}/screenshots
 
       - name: 更新網域設定
         if: needs.check_and_prepare.outputs.base_url != ''
         run: |
-          cd swag_Automation_QA
+          cd ${{ env.WORK_DIR }}
           cp ${{ needs.check_and_prepare.outputs.environment }}_domain.yaml ${{ needs.check_and_prepare.outputs.environment }}_domain.yaml.bak
           
           python3 <<EOF
@@ -185,8 +212,8 @@ jobs:
         id: test
         continue-on-error: true
         run: |
-          cd swag_Automation_QA
-          if [[ "${{ needs.check_and_prepare.outputs.test_type }}" == "fulltest" ]]; then
+          cd ${{ env.WORK_DIR }}
+          if [[ "${{ matrix.test_type }}" == "fulltest" ]]; then
             arch -arm64 robot \
               -v BROWSER:chrome \
               -v SELENIUM_TIMEOUT:60 \
@@ -203,7 +230,7 @@ jobs:
               -V data.yaml \
               -V country.yaml \
               -V ${{ needs.check_and_prepare.outputs.environment }}_domain.yaml \
-              -i ${{ needs.check_and_prepare.outputs.test_type }} \
+              -i ${{ matrix.test_type }} \
               TestCase
           fi
 
@@ -216,7 +243,7 @@ jobs:
           from datetime import datetime
           
           def generate_test_report():
-              result_file = 'swag_Automation_QA/output.xml'
+              result_file = '${{ env.WORK_DIR }}/output.xml'
               if not os.path.exists(result_file):
                   return "找不到測試結果檔案"
                   
@@ -227,7 +254,7 @@ jobs:
               report = ["### 測試結果摘要"]
               report.append(f"\n**觸發方式:** ${{ github.event_name }}")
               report.append(f"**執行環境:** ${{ needs.check_and_prepare.outputs.environment }}")
-              report.append(f"**測試類型:** ${{ needs.check_and_prepare.outputs.test_type }}")
+              report.append(f"**測試類型:** ${{ matrix.test_type }}")
               
               passed = failed = 0
               failed_tests = []
@@ -277,11 +304,11 @@ jobs:
       - name: 上傳測試結果
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.TEST_STATUS }}-test-results-${{ needs.check_and_prepare.outputs.test_type }}_Total${{ env.TOTAL_TESTS }}_${{ env.CURRENT_TIME }}
+          name: ${{ env.TEST_STATUS }}-test-results-${{ matrix.test_type }}_Total${{ env.TOTAL_TESTS }}_${{ env.CURRENT_TIME }}
           path: |
-            swag_Automation_QA/*.xml
-            swag_Automation_QA/*.html
-            swag_Automation_QA/screenshots/**
+            ${{ env.WORK_DIR }}/*.xml
+            ${{ env.WORK_DIR }}/*.html
+            ${{ env.WORK_DIR }}/screenshots/**
             test-report.md
           if-no-files-found: warn
 
