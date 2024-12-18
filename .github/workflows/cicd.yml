@@ -152,6 +152,7 @@ jobs:
         run: |
           rm -rf swag_Automation_QA/*.xml
           rm -rf swag_Automation_QA/*.html
+          rm -rf swag_Automation_QA/screenshots/*
 
       - name: 更新網域設定
         if: needs.check_and_prepare.outputs.base_url != ''
@@ -219,7 +220,7 @@ jobs:
           def generate_test_report():
               result_file = 'swag_Automation_QA/output.xml'
               if not os.path.exists(result_file):
-                  return "找不到測試結果檔案"
+                  return "找不到測試結果檔案", 0, 0, 0
                   
               tree = ET.parse(result_file)
               root = tree.getroot()
@@ -258,24 +259,32 @@ jobs:
                       report.append(f"- **{name}**")
                       report.append(f"  - 錯誤信息: {message}")
               
-              return "\n".join(report)
+              return "\n".join(report), total, passed, failed
           
-          report = generate_test_report()
+          report, total_tests, passed_tests, failed_tests = generate_test_report()
           with open('test-report.md', 'w', encoding='utf-8') as f:
               f.write(report)
           
+          # 設置環境變數
           with open(os.environ['GITHUB_ENV'], 'a') as env_file:
               current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
+              status_icon = '✅PASS' if failed_tests == 0 else '❌FAIL'
               env_file.write(f'CURRENT_TIME={current_time}\n')
+              env_file.write(f'TEST_STATUS={status_icon}\n')
+              env_file.write(f'TOTAL_TESTS={total_tests}\n')
           EOF
 
       - name: 上傳測試結果
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ needs.check_and_prepare.outputs.test_type }}_${{ env.CURRENT_TIME }}
+          name: ${{ env.TEST_STATUS }}-test-results-${{ needs.check_and_prepare.outputs.test_type }}_Total${{ env.TOTAL_TESTS }}_${{ env.CURRENT_TIME }}
           path: |
             swag_Automation_QA/*.xml
             swag_Automation_QA/*.html
+            swag_Automation_QA/screenshots/**
+            swag_Automation_QA/log.html
+            swag_Automation_QA/report.html
+            swag_Automation_QA/output.xml
             test-report.md
           if-no-files-found: warn
 
