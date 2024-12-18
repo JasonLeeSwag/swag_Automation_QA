@@ -2,7 +2,7 @@ name: SWAG 自動化測試
 
 on:
   schedule:
-    - cron: '0 9 * * 1'
+    - cron: '0 9 * * 1'  # 每週一早上 9 點執行
 
   issues:
     types: [opened, edited]
@@ -31,6 +31,7 @@ on:
           - register
           - video
           - myprofile
+          - fulltest
       custom_domain:
         description: '自定義網域 (可輸入完整URL或版本號)'
         required: false
@@ -43,72 +44,109 @@ permissions:
   contents: read
 
 jobs:
-  parse_content:
-    if: |
-      (github.event_name == 'pull_request' && (contains(github.event.pull_request.labels.*.name, 'e2e') || contains(github.event.pull_request.labels.*.name, 'fulltest'))) ||
-      (github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'e2e'))
+  # 檢查觸發條件和準備環境
+  check_and_prepare:
     runs-on: [self-hosted, macos]
     outputs:
-      should_run: ${{ steps.check_content.outputs.should_run }}
-      test_type: ${{ steps.check_content.outputs.test_type }}
-      base_url: ${{ steps.check_content.outputs.base_url }}
+      should_run: ${{ steps.check_conditions.outputs.should_run }}
+      test_type: ${{ steps.check_conditions.outputs.test_type }}
+      environment: ${{ steps.check_conditions.outputs.environment }}
+      base_url: ${{ steps.check_conditions.outputs.base_url }}
     
     steps:
-      - name: 解析內容
-        id: check_content
+      - name: 檢查條件和設置變數
+        id: check_conditions
         run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            LABELS="${{ join(github.event.pull_request.labels.*.name, ' ') }}"
-            TITLE="${{ github.event.pull_request.title }}"
-            BODY="${{ github.event.pull_request.body }}"
-          else
-            LABELS="${{ join(github.event.issue.labels.*.name, ' ') }}"
-            TITLE="${{ github.event.issue.title }}"
-            BODY="${{ github.event.issue.body }}"
-          fi
+          # 初始化變數
+          SHOULD_RUN="true"
+          TEST_TYPE=""
+          ENVIRONMENT=""
+          BASE_URL=""
           
-          # 檢查測試類型
-          if [[ $LABELS == *"fulltest"* ]]; then
-            echo "should_run=true" >> $GITHUB_OUTPUT
-            echo "test_type=fulltest" >> $GITHUB_OUTPUT
-          elif [[ $LABELS == *"e2e"* ]]; then
-            TITLE_LOWER=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]')
-            
-            TEST_TYPE="bvt"
-            if [[ $TITLE_LOWER =~ login|sign.?in ]]; then
-              TEST_TYPE="login"
-            elif [[ $TITLE_LOWER =~ register|sign.?up ]]; then
-              TEST_TYPE="register"
-            elif [[ $TITLE_LOWER =~ video|stream|rtc ]]; then
-              TEST_TYPE="video"
-            elif [[ $TITLE_LOWER =~ profile|account ]]; then
-              TEST_TYPE="myprofile"
-            fi
-            
-            echo "should_run=true" >> $GITHUB_OUTPUT
-            echo "test_type=$TEST_TYPE" >> $GITHUB_OUTPUT
-          fi
+          # 根據不同的觸發類型處理
+          case "${{ github.event_name }}" in
+            "schedule")
+              echo "排程觸發 - 週一自動執行"
+              TEST_TYPE="bvt"
+              ENVIRONMENT="uat"
+              ;;
+              
+            "workflow_dispatch")
+              echo "手動觸發"
+              TEST_TYPE="${{ inputs.test_type }}"
+              ENVIRONMENT="${{ inputs.environment }}"
+              if [[ -n "${{ inputs.custom_domain }}" ]]; then
+                BASE_URL="${{ inputs.custom_domain }}"
+              fi
+              ;;
+              
+            "pull_request")
+              echo "PR 觸發"
+              if [[ "${{ contains(github.event.pull_request.labels.*.name, 'fulltest') }}" == "true" ]]; then
+                TEST_TYPE="fulltest"
+                ENVIRONMENT="qat"
+              elif [[ "${{ contains(github.event.pull_request.labels.*.name, 'e2e') }}" == "true" ]]; then
+                TITLE=$(echo "${{ github.event.pull_request.title }}" | tr '[:upper:]' '[:lower:]')
+                if [[ $TITLE =~ login|sign.?in ]]; then
+                  TEST_TYPE="login"
+                elif [[ $TITLE =~ register|sign.?up ]]; then
+                  TEST_TYPE="register"
+                elif [[ $TITLE =~ video|stream|rtc ]]; then
+                  TEST_TYPE="video"
+                elif [[ $TITLE =~ profile|account ]]; then
+                  TEST_TYPE="myprofile"
+                else
+                  TEST_TYPE="bvt"
+                fi
+                ENVIRONMENT="qat"
+              else
+                SHOULD_RUN="false"
+              fi
+              ;;
+              
+            "issues")
+              echo "Issue 觸發"
+              if [[ "${{ contains(github.event.issue.labels.*.name, 'e2e') }}" == "true" ]]; then
+                TEST_TYPE="bvt"
+                ENVIRONMENT="qat"
+                # 檢查 Issue 內容中的自定義網域
+                if [[ "${{ github.event.issue.body }}" =~ base_url:[[:space:]]*(http[s]?:\/\/[^\s]*) ]]; then
+                  BASE_URL="${BASH_REMATCH[1]}"
+                fi
+              else
+                SHOULD_RUN="false"
+              fi
+              ;;
+          esac
           
-          # 解析自定義網域
-          if [[ $BODY =~ base_url:[[:space:]]*(http[s]?:\/\/[^\s]*) ]]; then
-            echo "base_url=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
-          fi
+          # 輸出結果
+          echo "should_run=${SHOULD_RUN}" >> $GITHUB_OUTPUT
+          echo "test_type=${TEST_TYPE}" >> $GITHUB_OUTPUT
+          echo "environment=${ENVIRONMENT}" >> $GITHUB_OUTPUT
+          echo "base_url=${BASE_URL}" >> $GITHUB_OUTPUT
+          
+          # 輸出日誌
+          echo "設置結果:"
+          echo "Should Run: ${SHOULD_RUN}"
+          echo "Test Type: ${TEST_TYPE}"
+          echo "Environment: ${ENVIRONMENT}"
+          echo "Base URL: ${BASE_URL}"
 
-  automated_test:
-    needs: parse_content
-    if: |
-      needs.parse_content.outputs.should_run == 'true' || 
-      github.event_name == 'workflow_dispatch' || 
-      github.event_name == 'schedule'
+  # 執行測試
+  run_tests:
+    needs: check_and_prepare
+    if: needs.check_and_prepare.outputs.should_run == 'true'
     runs-on: [self-hosted, macos]
     
-    env:
-      ENVIRONMENT: ${{ github.event_name == 'schedule' && 'uat' || inputs.environment || 'qat' }}
-      TEST_TYPE: ${{ github.event_name == 'schedule' && 'bvt' || needs.parse_content.outputs.test_type || inputs.test_type }}
-      
     steps:
       - name: 檢出程式碼
         uses: actions/checkout@v4
+
+      - name: 顯示測試配置
+        run: |
+          echo "測試環境: ${{ needs.check_and_prepare.outputs.environment }}"
+          echo "測試類型: ${{ needs.check_and_prepare.outputs.test_type }}"
+          echo "基礎網址: ${{ needs.check_and_prepare.outputs.base_url }}"
 
       - name: 清理工作區
         run: |
@@ -116,10 +154,10 @@ jobs:
           rm -rf swag_Automation_QA/*.html
 
       - name: 更新網域設定
-        if: ${{ inputs.custom_domain != '' || needs.parse_content.outputs.base_url != '' }}
+        if: needs.check_and_prepare.outputs.base_url != ''
         run: |
           cd swag_Automation_QA
-          cp ${ENVIRONMENT}_domain.yaml ${ENVIRONMENT}_domain.yaml.bak
+          cp ${{ needs.check_and_prepare.outputs.environment }}_domain.yaml ${{ needs.check_and_prepare.outputs.environment }}_domain.yaml.bak
           
           python3 <<EOF
           import yaml
@@ -127,26 +165,20 @@ jobs:
           def process_domain_input(input_str):
               if not input_str:
                   return 'https://swag.live/?lang=zh-TW'
-                  
               if input_str.startswith('http'):
                   return input_str
-                  
               if input_str.startswith('v3-'):
                   return f'https://{input_str}.app.swag.live/?lang=zh-TW'
-                  
               if '.app.swag.live' in input_str:
                   return f'https://{input_str}/?lang=zh-TW'
-                  
               return f'https://{input_str}.app.swag.live/?lang=zh-TW'
           
-          with open('${ENVIRONMENT}_domain.yaml', 'r', encoding='utf-8') as file:
+          with open('${{ needs.check_and_prepare.outputs.environment }}_domain.yaml', 'r', encoding='utf-8') as file:
               config = yaml.safe_load(file)
           
-          input_domain = '${{ inputs.custom_domain || needs.parse_content.outputs.base_url }}'
-          processed_url = process_domain_input(input_domain)
-          config['SWAG_BASE_URL'] = processed_url
+          config['SWAG_BASE_URL'] = process_domain_input('${{ needs.check_and_prepare.outputs.base_url }}')
           
-          with open('${ENVIRONMENT}_domain.yaml', 'w', encoding='utf-8') as file:
+          with open('${{ needs.check_and_prepare.outputs.environment }}_domain.yaml', 'w', encoding='utf-8') as file:
               yaml.dump(config, file, allow_unicode=True, default_flow_style=False)
           EOF
 
@@ -155,14 +187,14 @@ jobs:
         continue-on-error: true
         run: |
           cd swag_Automation_QA
-          if [[ "${{ env.TEST_TYPE }}" == "fulltest" ]]; then
+          if [[ "${{ needs.check_and_prepare.outputs.test_type }}" == "fulltest" ]]; then
             arch -arm64 robot \
               -v BROWSER:chrome \
               -v SELENIUM_TIMEOUT:60 \
               -v SELENIUM_IMPLICIT_WAIT:30 \
               -V data.yaml \
               -V country.yaml \
-              -V ${ENVIRONMENT}_domain.yaml \
+              -V ${{ needs.check_and_prepare.outputs.environment }}_domain.yaml \
               TestCase
           else
             arch -arm64 robot \
@@ -171,8 +203,8 @@ jobs:
               -v SELENIUM_IMPLICIT_WAIT:30 \
               -V data.yaml \
               -V country.yaml \
-              -V ${ENVIRONMENT}_domain.yaml \
-              -i ${TEST_TYPE} \
+              -V ${{ needs.check_and_prepare.outputs.environment }}_domain.yaml \
+              -i ${{ needs.check_and_prepare.outputs.test_type }} \
               TestCase
           fi
 
@@ -194,6 +226,10 @@ jobs:
               tests = root.findall('.//test')
               
               report = ["### 測試結果摘要"]
+              report.append(f"\n**觸發方式:** ${{ github.event_name }}")
+              report.append(f"**執行環境:** ${{ needs.check_and_prepare.outputs.environment }}")
+              report.append(f"**測試類型:** ${{ needs.check_and_prepare.outputs.test_type }}")
+              
               passed = failed = 0
               failed_tests = []
               
@@ -205,13 +241,12 @@ jobs:
                       passed += 1
                   elif status == 'FAIL':
                       failed += 1
-                      failed_tests.append(name)
+                      message = test.find('status').get('message', 'No error message')
+                      failed_tests.append((name, message))
               
               total = len(tests)
               success_rate = (passed / total * 100) if total > 0 else 0
               
-              report.append(f"\n**執行環境:** {os.environ.get('ENVIRONMENT', 'Unknown')}")
-              report.append(f"**測試類型:** {os.environ.get('TEST_TYPE', 'Unknown')}")
               report.append(f"**總測試數:** {total}")
               report.append(f"**通過:** {passed}")
               report.append(f"**失敗:** {failed}")
@@ -219,19 +254,16 @@ jobs:
               
               if failed_tests:
                   report.append("\n### 失敗的測試案例")
-                  for test in failed_tests:
-                      report.append(f"- {test}")
+                  for name, message in failed_tests:
+                      report.append(f"- **{name}**")
+                      report.append(f"  - 錯誤信息: {message}")
               
               return "\n".join(report)
           
-          # 生成報告
           report = generate_test_report()
-          
-          # 保存到文件
           with open('test-report.md', 'w', encoding='utf-8') as f:
               f.write(report)
           
-          # 設置環境變數
           with open(os.environ['GITHUB_ENV'], 'a') as env_file:
               current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
               env_file.write(f'CURRENT_TIME={current_time}\n')
@@ -240,7 +272,7 @@ jobs:
       - name: 上傳測試結果
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ env.TEST_TYPE }}_${{ env.CURRENT_TIME }}
+          name: test-results-${{ needs.check_and_prepare.outputs.test_type }}_${{ env.CURRENT_TIME }}
           path: |
             swag_Automation_QA/*.xml
             swag_Automation_QA/*.html
@@ -255,18 +287,13 @@ jobs:
             const fs = require('fs');
             const report = fs.readFileSync('test-report.md', 'utf8');
             
-            if (context.eventName === 'pull_request') {
+            const createComment = async () => {
               await github.rest.issues.createComment({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 body: report
               });
-            } else if (context.eventName === 'issues') {
-              await github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body: report
-              });
-            }
+            };
+            
+            await createComment();
