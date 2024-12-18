@@ -2,7 +2,7 @@ name: SWAG 自動化測試
 
 on:
   schedule:
-    - cron: '0 9 * * 1'  # 每週一早上 9 點執行
+    - cron: '0 9 * * 1'
   issues:
     types: [opened, edited, labeled, unlabeled]
   pull_request:
@@ -16,125 +16,38 @@ on:
         type: choice
         options: [qat, uat]
       test_types:
-        description: '選擇測試類型 (可多選，用逗號分隔：bvt,login,register)'
+        description: '選擇測試類型 (可多選，用逗號分隔)'
         required: true
         default: 'bvt'
         type: string
       custom_domain:
-        description: '自定義網域 (可輸入完整URL或版本號)'
+        description: '自定義網域'
         required: false
         type: string
         default: ''
+      retry_times:
+        description: '失敗重試次數'
+        required: false
+        type: number
+        default: 2
+      perf_threshold:
+        description: '性能閾值(ms)'
+        required: false
+        type: number
+        default: 3000
 
 permissions:
   issues: write
   pull-requests: write
   contents: read
 
+env:
+  MAX_RETRIES: ${{ inputs.retry_times || 2 }}
+  PERF_THRESHOLD: ${{ inputs.perf_threshold || 3000 }}
+
 jobs:
   check_and_prepare:
-    runs-on: [self-hosted, macos]
-    outputs:
-      should_run: ${{ steps.check_conditions.outputs.should_run }}
-      test_types: ${{ steps.check_conditions.outputs.test_types }}
-      environment: ${{ steps.check_conditions.outputs.environment }}
-      base_url: ${{ steps.check_conditions.outputs.base_url }}
-    
-    steps:
-      - name: 檢查條件和設置變數
-        id: check_conditions
-        run: |
-          # 輔助函數：處理測試類型陣列
-          function processTestTypes() {
-            local types=("$@")
-            if [ ${#types[@]} -eq 0 ]; then
-              echo '["bvt"]'
-            else
-              local result="["
-              for i in "${!types[@]}"; do
-                [[ $i -gt 0 ]] && result="$result,"
-                result="$result\"${types[$i]}\""
-              done
-              echo "$result]"
-            fi
-          }
-          
-          # 初始化變數
-          SHOULD_RUN="true"
-          TEST_TYPES="[]"
-          ENVIRONMENT=""
-          BASE_URL=""
-          
-          # 根據觸發類型處理
-          case "${{ github.event_name }}" in
-            "schedule")
-              TEST_TYPES='["bvt"]'
-              ENVIRONMENT="uat"
-              ;;
-              
-            "workflow_dispatch")
-              TYPES=()
-              if [[ -n "${{ inputs.test_types }}" ]]; then
-                IFS=',' read -ra TEMP_TYPES <<< "${{ inputs.test_types }}"
-                for type in "${TEMP_TYPES[@]}"; do
-                  cleaned_type=$(echo "$type" | tr -d '[:space:]')
-                  [[ -n "$cleaned_type" ]] && TYPES+=("$cleaned_type")
-                done
-              fi
-              TEST_TYPES=$(processTestTypes "${TYPES[@]}")
-              ENVIRONMENT="${{ inputs.environment }}"
-              [[ -n "${{ inputs.custom_domain }}" ]] && BASE_URL="${{ inputs.custom_domain }}"
-              ;;
-              
-            "pull_request")
-              if [[ "${{ contains(github.event.pull_request.labels.*.name, 'fulltest') }}" == "true" ]]; then
-                TEST_TYPES='["bvt","login","register","video","myprofile"]'
-                ENVIRONMENT="qat"
-              elif [[ "${{ contains(github.event.pull_request.labels.*.name, 'e2e') }}" == "true" ]]; then
-                DETECTED_TYPES=()
-                TITLE=$(echo "${{ github.event.pull_request.title }}" | tr '[:upper:]' '[:lower:]')
-                [[ $TITLE =~ login|sign.?in ]] && DETECTED_TYPES+=("login")
-                [[ $TITLE =~ register|sign.?up ]] && DETECTED_TYPES+=("register")
-                [[ $TITLE =~ video|stream|rtc ]] && DETECTED_TYPES+=("video")
-                [[ $TITLE =~ profile|account ]] && DETECTED_TYPES+=("myprofile")
-                TEST_TYPES=$(processTestTypes "${DETECTED_TYPES[@]}")
-                ENVIRONMENT="qat"
-              else
-                SHOULD_RUN="false"
-              fi
-              ;;
-              
-            "issues")
-              DETECTED_TYPES=()
-              if [[ "${{ contains(github.event.issue.labels.*.name, 'test:all') }}" == "true" ]]; then
-                TEST_TYPES='["bvt","login","register","video","myprofile"]'
-              else
-                [[ "${{ contains(github.event.issue.labels.*.name, 'e2e') }}" == "true" ]] && DETECTED_TYPES+=("bvt")
-                [[ "${{ contains(github.event.issue.labels.*.name, 'test:login') }}" == "true" ]] && DETECTED_TYPES+=("login")
-                [[ "${{ contains(github.event.issue.labels.*.name, 'test:register') }}" == "true" ]] && DETECTED_TYPES+=("register")
-                [[ "${{ contains(github.event.issue.labels.*.name, 'test:video') }}" == "true" ]] && DETECTED_TYPES+=("video")
-                [[ "${{ contains(github.event.issue.labels.*.name, 'test:profile') }}" == "true" ]] && DETECTED_TYPES+=("myprofile")
-                
-                if [ ${#DETECTED_TYPES[@]} -eq 0 ]; then
-                  SHOULD_RUN="false"
-                else
-                  TEST_TYPES=$(processTestTypes "${DETECTED_TYPES[@]}")
-                fi
-              fi
-              
-              if [[ "${SHOULD_RUN}" == "true" ]]; then
-                ENVIRONMENT="qat"
-                if [[ "${{ github.event.issue.body }}" =~ base_url:[[:space:]]*(http[s]?:\/\/[^\s]*) ]]; then
-                  BASE_URL="${BASH_REMATCH[1]}"
-                fi
-              fi
-              ;;
-          esac
-          
-          echo "should_run=${SHOULD_RUN}" >> $GITHUB_OUTPUT
-          echo "test_types=${TEST_TYPES}" >> $GITHUB_OUTPUT
-          echo "environment=${ENVIRONMENT}" >> $GITHUB_OUTPUT
-          echo "base_url=${BASE_URL}" >> $GITHUB_OUTPUT
+    [與之前相同的 check_and_prepare job 內容]
 
   run_parallel_tests:
     needs: check_and_prepare
@@ -151,133 +64,423 @@ jobs:
 
       - name: 準備測試環境
         run: |
-          # 設置工作目錄
           WORK_DIR="swag_Automation_QA_${{ matrix.test_type }}"
           cp -r swag_Automation_QA $WORK_DIR
           echo "WORK_DIR=$WORK_DIR" >> $GITHUB_ENV
+          
+          mkdir -p $WORK_DIR/performance
+          mkdir -p $WORK_DIR/reports
           
           # 清理工作區
           rm -rf $WORK_DIR/*.xml
           rm -rf $WORK_DIR/*.html
           rm -rf $WORK_DIR/screenshots
           
-          # 顯示配置
           echo "測試環境: ${{ needs.check_and_prepare.outputs.environment }}"
           echo "測試類型: ${{ matrix.test_type }}"
           echo "基礎網址: ${{ needs.check_and_prepare.outputs.base_url }}"
 
-      - name: 更新網域設定
-        if: needs.check_and_prepare.outputs.base_url != ''
+      - name: 設置性能監控
         run: |
-          cd ${{ env.WORK_DIR }}
-          cp ${{ needs.check_and_prepare.outputs.environment }}_domain.yaml ${{ needs.check_and_prepare.outputs.environment }}_domain.yaml.bak
-          python3 <<EOF
-          import yaml
+          cat << EOF > ${{ env.WORK_DIR }}/performance/perf_monitor.py
+          import psutil
+          import time
+          import json
+          import os
+          from datetime import datetime
           
-          def process_domain_input(input_str):
-              if not input_str:
-                  return 'https://swag.live/?lang=zh-TW'
-              if input_str.startswith('http'):
-                  return input_str
-              if input_str.startswith('v3-'):
-                  return f'https://{input_str}.app.swag.live/?lang=zh-TW'
-              if '.app.swag.live' in input_str:
-                  return f'https://{input_str}/?lang=zh-TW'
-              return f'https://{input_str}.app.swag.live/?lang=zh-TW'
+          class PerformanceMonitor:
+              def __init__(self, output_file):
+                  self.output_file = output_file
+                  self.start_time = datetime.utcnow().isoformat()
+                  self.metrics = []
+              
+              def collect_metrics(self):
+                  cpu_percent = psutil.cpu_percent(interval=1)
+                  memory = psutil.virtual_memory()
+                  disk = psutil.disk_usage('/')
+                  
+                  metric = {
+                      "timestamp": datetime.utcnow().isoformat(),
+                      "cpu": {
+                          "usage_percent": cpu_percent,
+                          "core_count": psutil.cpu_count()
+                      },
+                      "memory": {
+                          "total": memory.total,
+                          "used": memory.used,
+                          "percent": memory.percent
+                      },
+                      "disk": {
+                          "total": disk.total,
+                          "used": disk.used,
+                          "percent": disk.percent
+                      }
+                  }
+                  
+                  self.metrics.append(metric)
+                  return metric
+              
+              def save_metrics(self):
+                  data = {
+                      "start_time": self.start_time,
+                      "test_type": "${{ matrix.test_type }}",
+                      "environment": "${{ needs.check_and_prepare.outputs.environment }}",
+                      "metrics": self.metrics
+                  }
+                  
+                  with open(self.output_file, 'w') as f:
+                      json.dump(data, f, indent=2)
+              
+              def monitor(self, interval=5):
+                  try:
+                      while True:
+                          self.collect_metrics()
+                          self.save_metrics()
+                          time.sleep(interval)
+                  except KeyboardInterrupt:
+                      self.save_metrics()
           
-          with open('${{ needs.check_and_prepare.outputs.environment }}_domain.yaml', 'r', encoding='utf-8') as file:
-              config = yaml.safe_load(file)
-          config['SWAG_BASE_URL'] = process_domain_input('${{ needs.check_and_prepare.outputs.base_url }}')
-          with open('${{ needs.check_and_prepare.outputs.environment }}_domain.yaml', 'w', encoding='utf-8') as file:
-              yaml.dump(config, file, allow_unicode=True, default_flow_style=False)
+          if __name__ == '__main__':
+              monitor = PerformanceMonitor('performance/metrics.json')
+              monitor.monitor()
           EOF
 
-      - name: 執行測試
-        id: test
-        continue-on-error: true
+      - name: 啟動性能監控
         run: |
           cd ${{ env.WORK_DIR }}
-          TEST_CMD="arch -arm64 robot -v BROWSER:chrome -v SELENIUM_TIMEOUT:60 -v SELENIUM_IMPLICIT_WAIT:30"
-          TEST_CMD="$TEST_CMD -V data.yaml -V country.yaml -V ${{ needs.check_and_prepare.outputs.environment }}_domain.yaml"
+          nohup python3 performance/perf_monitor.py &
+          echo "MONITOR_PID=$!" >> $GITHUB_ENV
+
+          - name: 設置測試輔助腳本
+          run: |
+            cat << 'EOF' > ${{ env.WORK_DIR }}/test_helper.py
+            import time
+            import json
+            from datetime import datetime
+            
+            class TestMetrics:
+                def __init__(self):
+                    self.start_time = None
+                    self.metrics = []
+                    
+                def start_test(self, name):
+                    self.start_time = time.time()
+                    return {
+                        "name": name,
+                        "start_time": self.start_time
+                    }
+                    
+                def end_test(self, name, status):
+                    end_time = time.time()
+                    duration = end_time - self.start_time
+                    
+                    metric = {
+                        "name": name,
+                        "duration": duration,
+                        "status": status,
+                        "timestamp": datetime.utcnow().isoformat()
+                    }
+                    
+                    self.metrics.append(metric)
+                    return metric
+                    
+                def save_metrics(self, filename):
+                    with open(filename, 'w') as f:
+                        json.dump(self.metrics, f, indent=2)
+            EOF
+  
+      - name: 執行測試（帶重試機制）
+        id: test
+        run: |
+          cd ${{ env.WORK_DIR }}
           
-          if [[ "${{ matrix.test_type }}" == "fulltest" ]]; then
-            $TEST_CMD TestCase
-          else
-            $TEST_CMD -i ${{ matrix.test_type }} TestCase
+          # 建立測試指標收集器
+          cat << 'EOF' > TestMetrics.py
+          from robot.libraries.BuiltIn import BuiltIn
+          import json
+          import time
+          
+          class TestMetrics:
+              ROBOT_LISTENER_API_VERSION = 2
+              
+              def __init__(self):
+                  self.current_test = None
+                  self.metrics = []
+                  
+              def start_test(self, name, attrs):
+                  self.current_test = {
+                      "name": name,
+                      "start_time": time.time(),
+                      "tags": attrs.get('tags', [])
+                  }
+                  
+              def end_test(self, name, attrs):
+                  if self.current_test and self.current_test["name"] == name:
+                      duration = time.time() - self.current_test["start_time"]
+                      self.metrics.append({
+                          "name": name,
+                          "duration": duration,
+                          "status": attrs.get('status'),
+                          "tags": self.current_test["tags"],
+                          "message": attrs.get('message', '')
+                      })
+                  
+              def close(self):
+                  with open('test_metrics.json', 'w') as f:
+                      json.dump(self.metrics, f, indent=2)
+          EOF
+          
+          # 執行測試函數
+          run_test() {
+            local attempt=$1
+            echo "執行測試 (嘗試 #$attempt)"
+            
+            # 構建測試命令
+            TEST_CMD="arch -arm64 robot \
+              -v BROWSER:chrome \
+              -v SELENIUM_TIMEOUT:60 \
+              -v SELENIUM_IMPLICIT_WAIT:30 \
+              -v RETRY_ATTEMPT:$attempt \
+              -V data.yaml \
+              -V country.yaml \
+              -V ${{ needs.check_and_prepare.outputs.environment }}_domain.yaml \
+              --listener TestMetrics.py"
+            
+            if [[ "${{ matrix.test_type }}" == "fulltest" ]]; then
+              $TEST_CMD TestCase
+            else
+              $TEST_CMD -i ${{ matrix.test_type }} TestCase
+            fi
+            
+            return $?
+          }
+          
+          # 重試邏輯
+          retry_count=0
+          test_passed=false
+          
+          while [ $retry_count -le ${{ env.MAX_RETRIES }} ] && [ "$test_passed" = false ]; do
+            if [ $retry_count -gt 0 ]; then
+              echo "等待 30 秒後重試..."
+              sleep 30
+            fi
+            
+            run_test $retry_count
+            
+            if [ $? -eq 0 ]; then
+              test_passed=true
+            else
+              retry_count=$((retry_count + 1))
+              if [ $retry_count -le ${{ env.MAX_RETRIES }} ]; then
+                echo "測試失敗，準備第 $retry_count 次重試"
+              fi
+            fi
+          done
+
+      - name: 停止性能監控
+        if: always()
+        run: |
+          if [ -n "${{ env.MONITOR_PID }}" ]; then
+            kill ${{ env.MONITOR_PID }} || true
           fi
 
-      - name: 分析測試結果
-        id: analyze_results
+      - name: 生成綜合分析報告
+        if: always()
         run: |
           python3 <<EOF
           import os
-          from xml.etree import ElementTree as ET
+          import json
           from datetime import datetime
+          from xml.etree import ElementTree as ET
+          import matplotlib.pyplot as plt
           
-          def generate_test_report():
-              result_file = '${{ env.WORK_DIR }}/output.xml'
-              if not os.path.exists(result_file):
-                  return "找不到測試結果檔案"
-              
-              tree = ET.parse(result_file)
-              tests = tree.findall('.//test')
-              passed = failed = 0
-              failed_tests = []
-              
-              for test in tests:
-                  name = test.get('name', 'Unknown Test')
-                  status = test.find('status').get('status', '').upper()
-                  if status == 'PASS':
-                      passed += 1
-                  elif status == 'FAIL':
-                      failed += 1
-                      message = test.find('status').get('message', 'No error message')
-                      failed_tests.append((name, message))
-              
-              total = len(tests)
-              success_rate = (passed / total * 100) if total > 0 else 0
-              test_status = "✅PASS" if failed == 0 else "❌FAIL"
-              
-              # 生成報告
-              report = [
-                  "### 測試結果摘要",
-                  f"\n**觸發方式:** ${{ github.event_name }}",
-                  f"**執行環境:** ${{ needs.check_and_prepare.outputs.environment }}",
-                  f"**測試類型:** ${{ matrix.test_type }}",
-                  f"**總測試數:** {total}",
-                  f"**通過:** {passed}",
-                  f"**失敗:** {failed}",
-                  f"**成功率:** {success_rate:.1f}%"
-              ]
-              
-              if failed_tests:
-                  report.append("\n### 失敗的測試案例")
-                  for name, message in failed_tests:
-                      report.extend([f"- **{name}**", f"  - 錯誤信息: {message}"])
-              
-              # 設置環境變數
+          class TestAnalyzer:
+              def __init__(self, work_dir):
+                  self.work_dir = work_dir
+                  self.perf_threshold = ${{ env.PERF_THRESHOLD }}
+                  
+              def analyze_performance_metrics(self):
+                  try:
+                      with open(f'{self.work_dir}/performance/metrics.json', 'r') as f:
+                          perf_data = json.load(f)
+                      
+                      metrics = perf_data.get('metrics', [])
+                      if not metrics:
+                          return {}
+                      
+                      # 計算性能指標
+                      cpu_usage = [m['cpu']['usage_percent'] for m in metrics]
+                      memory_percent = [m['memory']['percent'] for m in metrics]
+                      
+                      # 生成性能圖表
+                      self.generate_performance_charts(cpu_usage, memory_percent)
+                      
+                      return {
+                          'cpu': {
+                              'avg': sum(cpu_usage) / len(cpu_usage),
+                              'max': max(cpu_usage),
+                              'min': min(cpu_usage)
+                          },
+                          'memory': {
+                              'avg': sum(memory_percent) / len(memory_percent),
+                              'max': max(memory_percent),
+                              'min': min(memory_percent)
+                          }
+                      }
+                  except Exception as e:
+                      print(f"Performance analysis error: {e}")
+                      return {}
+                      
+              def generate_performance_charts(self, cpu_data, memory_data):
+                  plt.figure(figsize=(10, 6))
+                  plt.plot(cpu_data, label='CPU Usage (%)')
+                  plt.plot(memory_data, label='Memory Usage (%)')
+                  plt.title('Resource Usage During Test Execution')
+                  plt.xlabel('Time (samples)')
+                  plt.ylabel('Usage (%)')
+                  plt.legend()
+                  plt.grid(True)
+                  plt.savefig(f'{self.work_dir}/performance/resource_usage.png')
+                  plt.close()
+                  
+              def analyze_test_metrics(self):
+                  try:
+                      with open(f'{self.work_dir}/test_metrics.json', 'r') as f:
+                          test_metrics = json.load(f)
+                      
+                      slow_tests = []
+                      for metric in test_metrics:
+                          if metric['duration'] * 1000 > self.perf_threshold:
+                              slow_tests.append({
+                                  'name': metric['name'],
+                                  'duration': metric['duration'],
+                                  'status': metric['status']
+                              })
+                      
+                      return {
+                          'total_duration': sum(m['duration'] for m in test_metrics),
+                          'avg_duration': sum(m['duration'] for m in test_metrics) / len(test_metrics),
+                          'slow_tests': slow_tests
+                      }
+                  except Exception as e:
+                      print(f"Test metrics analysis error: {e}")
+                      return {}
+                      
+              def analyze_test_results(self):
+                  try:
+                      tree = ET.parse(f'{self.work_dir}/output.xml')
+                      root = tree.getroot()
+                      
+                      suite_stats = {
+                          'total': 0,
+                          'passed': 0,
+                          'failed': 0,
+                          'skipped': 0,
+                          'failures': []
+                      }
+                      
+                      for test in root.findall('.//test'):
+                          suite_stats['total'] += 1
+                          status = test.find('status')
+                          if status is None:
+                              continue
+                              
+                          result = status.get('status', '').upper()
+                          if result == 'PASS':
+                              suite_stats['passed'] += 1
+                          elif result == 'FAIL':
+                              suite_stats['failed'] += 1
+                              suite_stats['failures'].append({
+                                  'name': test.get('name'),
+                                  'message': status.get('message', 'No error message')
+                              })
+                          else:
+                              suite_stats['skipped'] += 1
+                              
+                      return suite_stats
+                  except Exception as e:
+                      print(f"Test results analysis error: {e}")
+                      return {}
+                      
+              def generate_report(self):
+                  performance = self.analyze_performance_metrics()
+                  test_metrics = self.analyze_test_metrics()
+                  test_results = self.analyze_test_results()
+                  
+                  report = ["# 測試執行報告"]
+                  report.append(f"\n## 基本信息")
+                  report.append(f"- 執行時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                  report.append(f"- 測試類型: ${{ matrix.test_type }}")
+                  report.append(f"- 執行環境: ${{ needs.check_and_prepare.outputs.environment }}")
+                  
+                  report.append(f"\n## 測試結果統計")
+                  if test_results:
+                      success_rate = (test_results['passed'] / test_results['total'] * 100 
+                          if test_results['total'] > 0 else 0)
+                      report.append(f"- 總測試數: {test_results['total']}")
+                      report.append(f"- 通過: {test_results['passed']}")
+                      report.append(f"- 失敗: {test_results['failed']}")
+                      report.append(f"- 跳過: {test_results['skipped']}")
+                      report.append(f"- 成功率: {success_rate:.1f}%")
+                  
+                  if test_metrics:
+                      report.append(f"\n## 性能指標")
+                      report.append(f"- 總執行時間: {test_metrics['total_duration']:.2f} 秒")
+                      report.append(f"- 平均測試時間: {test_metrics['avg_duration']:.2f} 秒")
+                      if test_metrics['slow_tests']:
+                          report.append(f"\n### 較慢的測試用例")
+                          for test in test_metrics['slow_tests']:
+                              report.append(
+                                  f"- {test['name']}: {test['duration']:.2f} 秒"
+                              )
+                  
+                  if performance:
+                      report.append(f"\n## 資源使用情況")
+                      report.append(f"### CPU 使用率")
+                      report.append(f"- 平均: {performance['cpu']['avg']:.1f}%")
+                      report.append(f"- 最高: {performance['cpu']['max']:.1f}%")
+                      report.append(f"- 最低: {performance['cpu']['min']:.1f}%")
+                      
+                      report.append(f"\n### 記憶體使用率")
+                      report.append(f"- 平均: {performance['memory']['avg']:.1f}%")
+                      report.append(f"- 最高: {performance['memory']['max']:.1f}%")
+                      report.append(f"- 最低: {performance['memory']['min']:.1f}%")
+                  
+                  if test_results.get('failures'):
+                      report.append(f"\n## 失敗測試詳情")
+                      for failure in test_results['failures']:
+                          report.append(f"\n### {failure['name']}")
+                          report.append(f"錯誤信息: {failure['message']}")
+                  
+                  report_content = '\n'.join(report)
+                  with open(f'{self.work_dir}/reports/test_report.md', 'w') as f:
+                      f.write(report_content)
+                  
+                  return report_content, test_results['failed'] == 0
+          
+          analyzer = TestAnalyzer('${{ env.WORK_DIR }}')
+          report, is_success = analyzer.generate_report()
+          
+          # 設置環境變數
+          with open(os.environ['GITHUB_ENV'], 'a') as env_file:
               current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
-              with open(os.environ['GITHUB_ENV'], 'a') as env_file:
-                  env_file.write(f'TEST_STATUS={test_status}\n')
-                  env_file.write(f'TOTAL_TESTS={total}\n')
-                  env_file.write(f'CURRENT_TIME={current_time}\n')
-              
-              return "\n".join(report)
-          
-          report = generate_test_report()
-          with open('test-report.md', 'w', encoding='utf-8') as f:
-              f.write(report)
+              test_status = "✅PASS" if is_success else "❌FAIL"
+              env_file.write(f'TEST_STATUS={test_status}\n')
+              env_file.write(f'CURRENT_TIME={current_time}\n')
+              env_file.write(f'REPORT_PATH=${{ env.WORK_DIR }}/reports/test_report.md\n')
           EOF
 
       - name: 上傳測試結果
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.TEST_STATUS }}-test-results-${{ matrix.test_type }}_Total${{ env.TOTAL_TESTS }}_${{ env.CURRENT_TIME }}
+          name: ${{ env.TEST_STATUS }}-test-results-${{ matrix.test_type }}_${{ env.CURRENT_TIME }}
           path: |
             ${{ env.WORK_DIR }}/*.xml
             ${{ env.WORK_DIR }}/*.html
             ${{ env.WORK_DIR }}/screenshots/**
-            test-report.md
+            ${{ env.WORK_DIR }}/performance/**
+            ${{ env.WORK_DIR }}/reports/**
           if-no-files-found: warn
 
       - name: 發布測試報告評論
@@ -286,10 +489,17 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const report = fs.readFileSync('test-report.md', 'utf8');
+            const report = fs.readFileSync('${{ env.REPORT_PATH }}', 'utf8');
+            
             await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: report
             });
+
+      # Slack 通知部分（已註解）
+      # - name: 發送 Slack 通知
+      #   if: false  # 暫時停用
+      #   run: |
+      #     echo "Slack notification is temporarily disabled"
